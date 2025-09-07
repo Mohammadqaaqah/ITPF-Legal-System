@@ -63,69 +63,43 @@ async function loadLegalDocuments(language) {
         
         try {
             if (language === 'ar') {
-                // Try multiple loading methods for Arabic data
-                console.log('🔍 Attempting to load Arabic data...');
-                try {
-                    const arabicDataModule = await import('./arabic_data.js');
-                    parsedData = arabicDataModule.default;
-                    console.log('✅ Loaded from arabic_data.js');
-                } catch (jsError) {
-                    console.log(`❌ arabic_data.js failed: ${jsError.message}`);
-                    try {
-                        // Load 3 split files and combine them
-        const part1 = JSON.parse(fs.readFileSync(path.join(__dirname, 'arabic_part1.json'), 'utf8'));
-        const part2 = JSON.parse(fs.readFileSync(path.join(__dirname, 'arabic_part2.json'), 'utf8'));
-        const part3 = JSON.parse(fs.readFileSync(path.join(__dirname, 'arabic_part3.json'), 'utf8'));
-        
-        // Combine all parts
-        parsedData = {
-            metadata: {
-                title: "ITPF Legal Rules - Complete Arabic",
-                language: "ar",
-                total_articles: part1.articles.length + part2.articles.length + part3.articles.length,
-                assembled_from: "3_split_files"
-            },
-            articles: [...part1.articles, ...part2.articles, ...part3.articles],
-            appendices: part3.appendices
-        };
-                        console.log('✅ Loaded from arabic JSON file');
-                    } catch (jsonError) {
-                        console.log(`❌ Arabic JSON failed: ${jsonError.message}`);
-                        throw new Error(`Both JS and JSON loading failed for Arabic: JS(${jsError.message}) JSON(${jsonError.message})`);
-                    }
-                }
+                // Load 3 split Arabic files and combine them (SKIP corrupted arabic_data.js)
+                console.log('🔍 Loading Arabic data from split files...');
+                const part1 = JSON.parse(fs.readFileSync(path.join(__dirname, 'arabic_part1.json'), 'utf8'));
+                const part2 = JSON.parse(fs.readFileSync(path.join(__dirname, 'arabic_part2.json'), 'utf8'));
+                const part3 = JSON.parse(fs.readFileSync(path.join(__dirname, 'arabic_part3.json'), 'utf8'));
+                
+                // Combine all parts
+                parsedData = {
+                    metadata: {
+                        title: "ITPF Legal Rules - Complete Arabic",
+                        language: "ar",
+                        total_articles: part1.articles.length + part2.articles.length + part3.articles.length,
+                        assembled_from: "3_split_files"
+                    },
+                    articles: [...part1.articles, ...part2.articles, ...part3.articles],
+                    appendices: part3.appendices
+                };
+                console.log('✅ Loaded complete Arabic data from split files');
             } else {
-                // Try multiple loading methods for English data  
-                console.log('🔍 Attempting to load English data...');
-                try {
-                    const englishDataModule = await import('./english_data.js');
-                    parsedData = englishDataModule.default;
-                    console.log('✅ Loaded from english_data.js');
-                } catch (jsError) {
-                    console.log(`❌ english_data.js failed: ${jsError.message}`);
-                    try {
-                        // Load 3 split files and combine them
-        const part1 = JSON.parse(fs.readFileSync(path.join(__dirname, 'english_part1.json'), 'utf8'));
-        const part2 = JSON.parse(fs.readFileSync(path.join(__dirname, 'english_part2.json'), 'utf8'));
-        const part3 = JSON.parse(fs.readFileSync(path.join(__dirname, 'english_part3.json'), 'utf8'));
-        
-        // Combine all parts
-        parsedData = {
-            metadata: {
-                title: "ITPF Legal Rules - Complete English",
-                language: "en",
-                total_articles: part1.articles.length + part2.articles.length + part3.articles.length,
-                assembled_from: "3_split_files"
-            },
-            articles: [...part1.articles, ...part2.articles, ...part3.articles],
-            appendices: part3.appendices
-        };
-                        console.log('✅ Loaded from English JSON file');
-                    } catch (jsonError) {
-                        console.log(`❌ English JSON failed: ${jsonError.message}`);
-                        throw new Error(`Both JS and JSON loading failed for English: JS(${jsError.message}) JSON(${jsonError.message})`);
-                    }
-                }
+                // Load 3 split English files and combine them (SKIP corrupted english_data.js)
+                console.log('🔍 Loading English data from split files...');
+                const part1 = JSON.parse(fs.readFileSync(path.join(__dirname, 'english_part1.json'), 'utf8'));
+                const part2 = JSON.parse(fs.readFileSync(path.join(__dirname, 'english_part2.json'), 'utf8'));
+                const part3 = JSON.parse(fs.readFileSync(path.join(__dirname, 'english_part3.json'), 'utf8'));
+                
+                // Combine all parts
+                parsedData = {
+                    metadata: {
+                        title: "ITPF Legal Rules - Complete English",
+                        language: "en",
+                        total_articles: part1.articles.length + part2.articles.length + part3.articles.length,
+                        assembled_from: "3_split_files"
+                    },
+                    articles: [...part1.articles, ...part2.articles, ...part3.articles],
+                    appendices: part3.appendices
+                };
+                console.log('✅ Loaded complete English data from split files');
             }
         } catch (loadError) {
             console.error(`❌ CRITICAL: Failed to load any data files: ${loadError.message}`);
