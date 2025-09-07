@@ -89,7 +89,7 @@ async function loadLegalDocuments(language) {
                 } catch (jsError) {
                     console.log(`❌ english_data.js failed: ${jsError.message}`);
                     try {
-                        parsedData = JSON.parse(fs.readFileSync(path.join(__dirname, 'english_legal_rules_complete_authentic.json'), 'utf8'));
+                        parsedData = JSON.parse(fs.readFileSync(path.join(__dirname, 'english_legal_rules_complete_rebuild.json'), 'utf8'));
                         console.log('✅ Loaded from English JSON file');
                     } catch (jsonError) {
                         console.log(`❌ English JSON failed: ${jsonError.message}`);
