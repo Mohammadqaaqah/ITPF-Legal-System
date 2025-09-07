@@ -246,14 +246,14 @@ JSON only:
 }`;
 
     return {
-        model: isArabic ? "deepseek-reasoner" : "deepseek-chat",
+        model: isArabic ? "deepseek-chat" : "deepseek-chat", // Use same model for consistency
         messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt }
         ],
-        temperature: 0.6, // Optimal for Arabic based on research
-        max_tokens: isArabic ? 800 : 1200,
-        stream: true, // Enable streaming!
+        temperature: 0.3, // Lower temperature for more consistent results
+        max_tokens: isArabic ? 1000 : 1200,
+        stream: false, // Disable streaming for reliability
         response_format: { type: "json_object" }
     };
 }
@@ -280,11 +280,17 @@ function getNextApiKey(language = 'en', retryCount = 0) {
 }
 
 /**
- * Revolutionary streaming API call with Vercel's 5-minute timeout!
+ * Simplified non-streaming API call for reliability
  */
 function streamDeepSeekAPI(payload, language) {
     return new Promise((resolve, reject) => {
-        const postData = JSON.stringify(payload);
+        // Remove streaming to fix the timeout issue
+        const nonStreamPayload = {
+            ...payload,
+            stream: false // Disable streaming for reliability
+        };
+        
+        const postData = JSON.stringify(nonStreamPayload);
         const url = new URL(DEEPSEEK_API_ENDPOINT);
         
         let apiKey;
@@ -309,97 +315,75 @@ function streamDeepSeekAPI(payload, language) {
                 'Content-Type': 'application/json',
                 'Content-Length': Buffer.byteLength(postData),
                 'Authorization': `Bearer ${apiKey}`,
-                'Accept': 'text/event-stream', // Accept SSE
-                'Cache-Control': 'no-cache',
-                'User-Agent': 'ITPF-Legal-Search/3.0-Vercel'
+                'Accept': 'application/json',
+                'User-Agent': 'ITPF-Legal-Search/3.1-Vercel'
             }
         };
 
-        console.log(`🚀 Using Vercel streaming API for ${language} - 5 MINUTE TIMEOUT!`);
+        console.log(`🚀 Using Vercel non-streaming API for ${language} - RELIABLE MODE!`);
 
         const req = https.request(options, (res) => {
-            let streamData = '';
-            let lastEventData = '';
+            let responseData = '';
             
             res.on('data', (chunk) => {
-                const chunkStr = chunk.toString();
-                streamData += chunkStr;
-                
-                // Process SSE events
-                const events = chunkStr.split('\n\n');
-                events.forEach(event => {
-                    if (event.startsWith('data: ')) {
-                        const data = event.slice(6);
-                        if (data === '[DONE]') {
-                            // Stream complete
-                            return;
-                        }
-                        if (data.trim() && data !== 'keep-alive') {
-                            try {
-                                const parsed = JSON.parse(data);
-                                if (parsed.choices && parsed.choices[0]) {
-                                    const delta = parsed.choices[0].delta;
-                                    if (delta && delta.content) {
-                                        lastEventData += delta.content;
-                                    }
-                                    // Check if message is complete
-                                    if (parsed.choices[0].finish_reason === 'stop') {
-                                        resolve({
-                                            choices: [{
-                                                message: {
-                                                    content: lastEventData
-                                                },
-                                                finish_reason: 'stop'
-                                            }]
-                                        });
-                                    }
-                                }
-                            } catch (parseError) {
-                                // Continue collecting data
-                            }
-                        }
-                    }
-                });
+                responseData += chunk.toString();
             });
             
             res.on('end', () => {
-                if (lastEventData) {
-                    resolve({
-                        choices: [{
-                            message: {
-                                content: lastEventData
-                            },
-                            finish_reason: 'stop'
-                        }]
-                    });
-                } else {
+                if (res.statusCode !== 200) {
+                    console.error(`DeepSeek API error: ${res.statusCode} - ${responseData}`);
                     reject({
-                        error: 'Empty stream response',
+                        error: `API error: ${res.statusCode}`,
                         message: language === 'ar' 
-                            ? 'لم يتم تلقي استجابة'
-                            : 'No response received'
+                            ? 'خطأ في خدمة البحث'
+                            : 'Search service error'
+                    });
+                    return;
+                }
+                
+                try {
+                    const parsed = JSON.parse(responseData);
+                    if (parsed.choices && parsed.choices[0]) {
+                        resolve(parsed);
+                    } else {
+                        reject({
+                            error: 'Invalid API response format',
+                            message: language === 'ar' 
+                                ? 'استجابة غير صحيحة من الخدمة'
+                                : 'Invalid service response'
+                        });
+                    }
+                } catch (parseError) {
+                    console.error('JSON parse error:', parseError);
+                    console.error('Raw response:', responseData);
+                    reject({
+                        error: 'Failed to parse API response',
+                        message: language === 'ar' 
+                            ? 'خطأ في تحليل الاستجابة'
+                            : 'Response parsing error'
                     });
                 }
             });
         });
 
         req.on('error', (error) => {
+            console.error('Request error:', error);
             reject({
-                error: `Streaming error: ${error.message}`,
+                error: `Request error: ${error.message}`,
                 message: language === 'ar' 
-                    ? 'خطأ في الاتصال المباشر'
-                    : 'Streaming connection error'
+                    ? 'خطأ في الطلب'
+                    : 'Request error'
             });
         });
 
-        // Extended timeout for Vercel - 280 seconds!
-        req.setTimeout(REQUEST_TIMEOUT, () => {
+        // Shorter timeout for non-streaming - 60 seconds
+        req.setTimeout(60000, () => {
             req.destroy();
             reject({
-                error: 'Request timeout after 280 seconds',
+                error: 'Request timeout after 60 seconds',
                 message: language === 'ar' 
-                    ? 'انتهت مهلة البحث المطولة'
-                    : 'Extended search timeout'
+                    ? 'انتهت مهلة الطلب'
+                    : 'Request timeout'
             });
         });
 
