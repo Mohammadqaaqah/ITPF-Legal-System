@@ -4,9 +4,8 @@
   "description": "Bilingual legal query system for ITPF using DeepSeek API",
   "main": "index.html",
   "scripts": {
-    "dev": "netlify dev",
+    "dev": "vercel dev",
     "build": "mkdir -p public && cp *.html *.css *.js *.json public/ 2>/dev/null && echo 'Build completed - files copied to public/'",
-    "deploy": "netlify deploy --prod",
     "index": "node indexing_script.js",
     "test": "echo 'No tests specified'",
     "serve": "python -m http.server 8000 || python3 -m http.server 8000"
@@ -19,7 +18,7 @@
     "english",
     "tent-pegging",
     "itpf",
-    "netlify",
+    "vercel",
     "deepseek"
   ],
   "author": "ITPF Development Team",
@@ -27,12 +26,10 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "devDependencies": {
-    "netlify-cli": "^17.0.0"
-  },
+  "devDependencies": {},
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/itpf-legal-query.git"
+    "url": "https://github.com/Mohammadqaaqah/ITPF-Legal-System.git"
   },
-  "homepage": "https://your-site-name.netlify.app"
+  "homepage": "https://github.com/Mohammadqaaqah/ITPF-Legal-System"
 }
