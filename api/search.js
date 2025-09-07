@@ -608,6 +608,9 @@ function processSearchResults(apiResponse, language) {
  * Main Vercel Function Handler - With 5-minute timeout support!
  */
 export default async function handler(req, res) {
+    console.log('🚀 VERCEL FUNCTION STARTED - DEBUG VERSION WITH DETAILED LOGGING');
+    console.log('📝 Request method:', req.method);
+    
     // Handle CORS preflight requests
     if (req.method === 'OPTIONS') {
         return res.status(200).json({});
@@ -655,7 +658,9 @@ export default async function handler(req, res) {
         }
         
         // Load legal documents
+        console.log(`🔄 About to call loadLegalDocuments for language: ${language}`);
         const documents = loadLegalDocuments(language);
+        console.log(`✅ loadLegalDocuments returned:`, documents ? 'SUCCESS' : 'NULL');
         if (!documents) {
             return res.status(500).json({
                 success: false,
