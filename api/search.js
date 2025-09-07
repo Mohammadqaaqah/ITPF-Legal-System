@@ -9,7 +9,13 @@
  * Max Duration: 300 seconds (5 minutes)
  */
 
-const https = require('https');
+import https from 'https';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Configuration - Multi-key load balancing  
 const DEEPSEEK_API_KEYS = [
@@ -48,7 +54,7 @@ function validateRequest(query, language) {
 /**
  * Load legal documents based on language
  */
-function loadLegalDocuments(language) {
+async function loadLegalDocuments(language) {
     try {
         // CRITICAL: Load COMPLETE authentic legal documents - all 154 articles + appendices 9&10
         console.log(`🗂️ Loading COMPLETE AUTHENTIC ${language} legal rules (154 articles + appendices 9&10)`);
@@ -60,12 +66,13 @@ function loadLegalDocuments(language) {
                 // Try multiple loading methods for Arabic data
                 console.log('🔍 Attempting to load Arabic data...');
                 try {
-                    parsedData = require('./arabic_data.js');
+                    const arabicDataModule = await import('./arabic_data.js');
+                    parsedData = arabicDataModule.default;
                     console.log('✅ Loaded from arabic_data.js');
                 } catch (jsError) {
                     console.log(`❌ arabic_data.js failed: ${jsError.message}`);
                     try {
-                        parsedData = require('./arabic_legal_rules_complete_authentic.json');
+                        parsedData = JSON.parse(fs.readFileSync(path.join(__dirname, 'arabic_legal_rules_complete_authentic.json'), 'utf8'));
                         console.log('✅ Loaded from arabic JSON file');
                     } catch (jsonError) {
                         console.log(`❌ Arabic JSON failed: ${jsonError.message}`);
@@ -76,12 +83,13 @@ function loadLegalDocuments(language) {
                 // Try multiple loading methods for English data  
                 console.log('🔍 Attempting to load English data...');
                 try {
-                    parsedData = require('./english_data.js');
+                    const englishDataModule = await import('./english_data.js');
+                    parsedData = englishDataModule.default;
                     console.log('✅ Loaded from english_data.js');
                 } catch (jsError) {
                     console.log(`❌ english_data.js failed: ${jsError.message}`);
                     try {
-                        parsedData = require('./english_legal_rules_complete_authentic.json');
+                        parsedData = JSON.parse(fs.readFileSync(path.join(__dirname, 'english_legal_rules_complete_authentic.json'), 'utf8'));
                         console.log('✅ Loaded from English JSON file');
                     } catch (jsonError) {
                         console.log(`❌ English JSON failed: ${jsonError.message}`);
@@ -659,7 +667,7 @@ export default async function handler(req, res) {
         
         // Load legal documents
         console.log(`🔄 About to call loadLegalDocuments for language: ${language}`);
-        const documents = loadLegalDocuments(language);
+        const documents = await loadLegalDocuments(language);
         console.log(`✅ loadLegalDocuments returned:`, documents ? 'SUCCESS' : 'NULL');
         if (!documents) {
             return res.status(500).json({

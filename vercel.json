@@ -1,4 +1,5 @@
 {
+  "name": "itpf-legal-search",
   "functions": {
     "api/search.js": {
       "maxDuration": 300

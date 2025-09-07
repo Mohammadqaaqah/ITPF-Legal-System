@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Bilingual legal query system for ITPF using DeepSeek API",
   "main": "index.html",
+  "type": "module",
   "scripts": {
     "dev": "vercel dev",
     "build": "mkdir -p public && cp *.html *.css *.js *.json public/ 2>/dev/null && echo 'Build completed - files copied to public/'",
