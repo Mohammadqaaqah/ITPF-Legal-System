@@ -72,7 +72,7 @@ async function loadLegalDocuments(language) {
                 } catch (jsError) {
                     console.log(`❌ arabic_data.js failed: ${jsError.message}`);
                     try {
-                        parsedData = JSON.parse(fs.readFileSync(path.join(__dirname, 'arabic_legal_rules_v2.json'), 'utf8'));
+                        parsedData = JSON.parse(fs.readFileSync(path.join(__dirname, 'arabic_legal_rules_clean.json'), 'utf8'));
                         console.log('✅ Loaded from arabic JSON file');
                     } catch (jsonError) {
                         console.log(`❌ Arabic JSON failed: ${jsonError.message}`);
