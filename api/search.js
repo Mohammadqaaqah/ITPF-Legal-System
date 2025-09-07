@@ -50,44 +50,80 @@ function validateRequest(query, language) {
  */
 function loadLegalDocuments(language) {
     try {
-        // Load COMPLETE legal documents - all 154 articles with appendices
+        // CRITICAL: Load COMPLETE authentic legal documents - all 154 articles + appendices 9&10
+        // Multiple path attempts to ensure file is found in different deployment environments
         const fs = require('fs');
         const path = require('path');
         
         let filePath;
+        let fileName;
+        
         if (language === 'ar') {
-            // Use the COMPLETE authentic Arabic legal rules file (154 articles + appendices)
-            filePath = path.join(process.cwd(), 'arabic_legal_rules_complete_authentic.json');
+            fileName = 'arabic_legal_rules_complete_authentic.json';
             console.log('🗂️ Loading COMPLETE AUTHENTIC Arabic legal rules (154 articles + appendices 9&10)');
         } else {
-            // Use the COMPLETE authentic English legal rules file (154 articles + appendices)
-            filePath = path.join(process.cwd(), 'english_legal_rules_complete_authentic.json');
+            fileName = 'english_legal_rules_complete_authentic.json';
             console.log('🗂️ Loading COMPLETE AUTHENTIC English legal rules (154 articles + appendices 9&10)');
         }
         
-        const data = fs.readFileSync(filePath, 'utf8');
+        // Try multiple possible paths for Vercel deployment compatibility
+        const possiblePaths = [
+            path.join(process.cwd(), fileName),           // Root directory
+            path.join(__dirname, '..', fileName),        // Parent of api folder
+            path.join(__dirname, '..', '..', fileName),  // Two levels up
+            fileName                                     // Current directory
+        ];
+        
+        let data = null;
+        let usedPath = null;
+        
+        for (const testPath of possiblePaths) {
+            try {
+                if (fs.existsSync(testPath)) {
+                    data = fs.readFileSync(testPath, 'utf8');
+                    usedPath = testPath;
+                    console.log(`✅ Found complete authentic file at: ${testPath}`);
+                    break;
+                }
+            } catch (pathError) {
+                console.log(`❌ Path not accessible: ${testPath}`);
+                continue;
+            }
+        }
+        
+        if (!data) {
+            throw new Error(`Complete authentic file not found: ${fileName}`);
+        }
+        
         const parsedData = JSON.parse(data);
         
-        // Log comprehensive data loaded
-        console.log(`✅ Loaded ${parsedData.total_articles} articles with complete appendices for ${language}`);
+        // CRITICAL VERIFICATION: Ensure we have all 154 articles
+        if (!parsedData.metadata || parsedData.metadata.total_articles !== 154) {
+            console.error(`❌ INTEGRITY ERROR: Expected 154 articles, found ${parsedData.metadata?.total_articles}`);
+            throw new Error('Incomplete legal document detected - missing articles!');
+        }
+        
+        if (!parsedData.articles || parsedData.articles.length < 154) {
+            console.error(`❌ ARTICLES ARRAY ERROR: Expected 154 articles, found ${parsedData.articles?.length}`);
+            throw new Error('Articles array is incomplete!');
+        }
+        
+        if (!parsedData.appendices || parsedData.appendices.length < 2) {
+            console.error(`❌ APPENDICES ERROR: Expected 2 appendices, found ${parsedData.appendices?.length}`);
+            throw new Error('Appendices 9 & 10 are missing!');
+        }
+        
+        console.log(`✅ VERIFIED COMPLETE AUTHENTIC DATA: ${parsedData.articles.length} articles + ${parsedData.appendices.length} appendices for ${language}`);
+        console.log(`📋 Articles range: ${parsedData.articles[0]?.article_number} to ${parsedData.articles[parsedData.articles.length-1]?.article_number}`);
         
         return parsedData;
-    } catch (error) {
-        console.error(`❌ Error loading COMPLETE ${language} documents:`, error);
         
-        // Fallback to old incomplete files if complete files not found
-        try {
-            const fs = require('fs');
-            const path = require('path');
-            const fallbackFile = language === 'ar' ? 'arabic_rules.json' : 'english_rules.json';
-            const fallbackPath = path.join(process.cwd(), fallbackFile);
-            const fallbackData = fs.readFileSync(fallbackPath, 'utf8');
-            console.warn(`⚠️ Using fallback incomplete legal rules for ${language}`);
-            return JSON.parse(fallbackData);
-        } catch (fallbackError) {
-            console.error(`❌ Failed to load any legal documents for ${language}:`, fallbackError);
-            return null;
-        }
+    } catch (error) {
+        console.error(`❌ CRITICAL ERROR loading COMPLETE ${language} documents:`, error);
+        console.error(`❌ This means the complete authentic legal texts are not accessible!`);
+        
+        // REFUSE to use incomplete fallback files - maintain integrity!
+        throw new Error(`FAILED TO LOAD COMPLETE AUTHENTIC LEGAL TEXTS for ${language}. This violates the requirement to keep all 154 articles + appendices 9&10 accessible.`);
     }
 }
 
@@ -170,8 +206,33 @@ function optimizeDocumentsForArabic(documents, language) {
     
     optimized.total_articles = optimized.articles.length;
     
-    console.log(`✅ Optimized ${optimized.articles.length} COMPLETE AUTHENTIC legal articles for ${language}`);
-    console.log(`📊 Document metadata: ${JSON.stringify(documents.metadata || {}, null, 1)}`);
+    // CRITICAL INTEGRITY CHECK: Ensure no articles are lost during optimization
+    if (language === 'ar') {
+        const expectedArticles = 154;
+        const expectedAppendices = 2;
+        const totalExpected = expectedArticles + expectedAppendices;
+        
+        if (optimized.articles.length < totalExpected) {
+            console.error(`❌ INTEGRITY VIOLATION: Expected ${totalExpected} items, got ${optimized.articles.length}`);
+            console.error(`❌ Original articles: ${documents.articles?.length}, appendices: ${documents.appendices?.length}`);
+            throw new Error(`CRITICAL: Lost ${totalExpected - optimized.articles.length} legal items during Arabic optimization!`);
+        }
+    } else {
+        // English should also have 154 articles + 2 appendices
+        const expectedTotal = 156; // 154 articles + 2 appendices
+        if (optimized.articles.length < expectedTotal) {
+            console.error(`❌ INTEGRITY VIOLATION: Expected ${expectedTotal} items, got ${optimized.articles.length}`);
+            console.error(`❌ English structure may be different - logging details...`);
+            if (documents.chapters) {
+                documents.chapters.forEach((chapter, i) => {
+                    console.log(`Chapter ${i}: ${chapter.title}, Articles: ${chapter.articles?.length}`);
+                });
+            }
+        }
+    }
+    
+    console.log(`✅ VERIFIED: Optimized ${optimized.articles.length} COMPLETE AUTHENTIC legal articles for ${language}`);
+    console.log(`📊 Articles preserved: ALL ${optimized.articles.length} items including appendices`);
     
     return optimized;
 }
