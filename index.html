@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ITPF Legal Query System | نظام الاستعلام القانوني للاتحاد الدولي لالتقاط الأوتاد</title>
+    <meta name="description" content="Search ITPF legal documents in Arabic and English | البحث في الوثائق القانونية للاتحاد الدولي لالتقاط الأوتاد بالعربية والإنجليزية">
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Meta tags for social sharing -->
+    <meta property="og:title" content="ITPF Legal Query System">
+    <meta property="og:description" content="Search ITPF legal documents in Arabic and English">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <h1 class="logo-text">
+                        <span class="logo-en">ITPF Legal Search</span>
+                        <span class="logo-ar">البحث القانوني للاتحاد الدولي</span>
+                    </h1>
+                </div>
+                
+                <!-- Language Toggle -->
+                <div class="language-toggle">
+                    <button id="languageToggle" class="toggle-btn" aria-label="Switch Language">
+                        <span class="toggle-option active" data-lang="en">EN</span>
+                        <span class="toggle-separator">|</span>
+                        <span class="toggle-option" data-lang="ar">عربي</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <div class="container">
+            <!-- Search Section -->
+            <section class="search-section">
+                <div class="search-container">
+                    <div class="search-header">
+                        <h2 class="search-title">
+                            <span data-lang-text="search-title-en">Search Legal Documents</span>
+                            <span data-lang-text="search-title-ar">البحث في الوثائق القانونية</span>
+                        </h2>
+                        <p class="search-subtitle">
+                            <span data-lang-text="search-subtitle-en">Find answers from ITPF rules and regulations</span>
+                            <span data-lang-text="search-subtitle-ar">اعثر على إجابات من قوانين ولوائح الاتحاد الدولي لالتقاط الأوتاد</span>
+                        </p>
+                    </div>
+                    
+                    <!-- Search Form -->
+                    <form id="searchForm" class="search-form">
+                        <div class="search-input-container">
+                            <textarea 
+                                id="searchQuery" 
+                                class="search-input" 
+                                rows="3"
+                                maxlength="1000"
+                                required
+                                autocomplete="off"
+                                spellcheck="true"
+                            ></textarea>
+                            <label for="searchQuery" class="search-label">
+                                <span data-lang-text="search-placeholder-en">Enter your legal question here...</span>
+                                <span data-lang-text="search-placeholder-ar">أدخل سؤالك القانوني هنا...</span>
+                            </label>
+                            <div class="character-counter">
+                                <span id="charCount">0</span>/1000
+                            </div>
+                        </div>
+                        
+                        <button type="submit" id="searchButton" class="search-btn">
+                            <span class="btn-icon">🔍</span>
+                            <span class="btn-text">
+                                <span data-lang-text="search-btn-en">Search</span>
+                                <span data-lang-text="search-btn-ar">بحث</span>
+                            </span>
+                            <div class="loading-spinner" id="loadingSpinner"></div>
+                        </button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Results Section -->
+            <section class="results-section" id="resultsSection">
+                <!-- Loading State -->
+                <div class="loading-state" id="loadingState">
+                    <div class="loading-animation">
+                        <div class="loading-dots">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                    </div>
+                    <p class="loading-text">
+                        <span data-lang-text="loading-en">Searching legal documents...</span>
+                        <span data-lang-text="loading-ar">جاري البحث في الوثائق القانونية...</span>
+                    </p>
+                </div>
+
+                <!-- Results Container -->
+                <div class="results-container" id="resultsContainer">
+                    <!-- Results will be dynamically inserted here -->
+                </div>
+
+                <!-- Error State -->
+                <div class="error-state" id="errorState">
+                    <div class="error-icon">⚠️</div>
+                    <h3 class="error-title">
+                        <span data-lang-text="error-title-en">Search Error</span>
+                        <span data-lang-text="error-title-ar">خطأ في البحث</span>
+                    </h3>
+                    <p class="error-message" id="errorMessage">
+                        <!-- Error message will be inserted here -->
+                    </p>
+                    <button class="retry-btn" id="retryButton">
+                        <span data-lang-text="retry-btn-en">Try Again</span>
+                        <span data-lang-text="retry-btn-ar">حاول مرة أخرى</span>
+                    </button>
+                </div>
+
+                <!-- No Results State -->
+                <div class="no-results-state" id="noResultsState">
+                    <div class="no-results-icon">📋</div>
+                    <h3 class="no-results-title">
+                        <span data-lang-text="no-results-title-en">No Results Found</span>
+                        <span data-lang-text="no-results-title-ar">لم يتم العثور على نتائج</span>
+                    </h3>
+                    <p class="no-results-message">
+                        <span data-lang-text="no-results-message-en">Try using different keywords or rephrasing your question</span>
+                        <span data-lang-text="no-results-message-ar">حاول استخدام كلمات مختلفة أو إعادة صياغة السؤال</span>
+                    </p>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <p class="footer-text">
+                    <span data-lang-text="footer-text-en">© 2024 International Tent Pegging Federation. All rights reserved.</span>
+                    <span data-lang-text="footer-text-ar">© 2024 الاتحاد الدولي لالتقاط الأوتاد. جميع الحقوق محفوظة.</span>
+                </p>
+                <div class="footer-links">
+                    <span class="footer-note">
+                        <span data-lang-text="footer-note-en">Powered by AI Search Technology</span>
+                        <span data-lang-text="footer-note-ar">مدعوم بتقنية البحث الذكي</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- JavaScript -->
+    <script src="app.js"></script>
+</body>
+</html>

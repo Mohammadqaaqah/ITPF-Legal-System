@@ -1,0 +1,483 @@
+/**
+ * Vercel Function: Legal Document Search
+ * 
+ * This function handles search requests with 5-minute timeout support
+ * for comprehensive Arabic legal document processing.
+ * 
+ * Endpoint: /api/search
+ * Methods: GET, POST
+ * Max Duration: 300 seconds (5 minutes)
+ */
+
+const https = require('https');
+
+// Configuration - Multi-key load balancing  
+const DEEPSEEK_API_KEYS = [
+    process.env.DEEPSEEK_API_KEY,
+    process.env.DEEPSEEK_API_KEY_2, 
+    process.env.DEEPSEEK_API_KEY_3
+].filter(key => key); // Remove undefined keys
+
+const DEEPSEEK_API_ENDPOINT = 'https://api.deepseek.com/chat/completions';
+const REQUEST_TIMEOUT = 280000; // 280 seconds (leave 20 seconds buffer for Vercel)
+
+/**
+ * Validates the request parameters
+ */
+function validateRequest(query, language) {
+    const errors = [];
+    
+    if (!query || typeof query !== 'string' || query.trim().length === 0) {
+        errors.push('Query is required and must be a non-empty string');
+    }
+    
+    if (query && query.trim().length > 1000) {
+        errors.push('Query is too long (maximum 1000 characters)');
+    }
+    
+    if (!language || !['ar', 'en'].includes(language)) {
+        errors.push('Language must be either "ar" or "en"');
+    }
+    
+    return {
+        isValid: errors.length === 0,
+        errors
+    };
+}
+
+/**
+ * Load legal documents based on language
+ */
+function loadLegalDocuments(language) {
+    try {
+        // Always load ALL documents - legal texts are interconnected and important
+        if (language === 'ar') {
+            return require('../arabic_rules.json');
+        } else {
+            return require('../english_rules.json');
+        }
+    } catch (error) {
+        console.error(`Error loading ${language} documents:`, error);
+        return null;
+    }
+}
+
+/**
+ * Optimize documents specifically for Arabic processing based on DeepSeek research
+ */
+function optimizeDocumentsForArabic(documents, language) {
+    const optimized = {};
+    const mainKey = Object.keys(documents)[0];
+    
+    if (!documents[mainKey]) return optimized;
+    
+    const articles = documents[mainKey];
+    optimized[mainKey] = {};
+    
+    Object.keys(articles).forEach(articleKey => {
+        const article = articles[articleKey];
+        
+        if (language === 'ar') {
+            // Arabic-specific optimizations based on DeepSeek capabilities
+            optimized[mainKey][articleKey] = {
+                title: article.title,
+                // Use Modern Standard Arabic (MSA) - better supported
+                text: preprocessArabicText(article.text || ''),
+                // Keep structured data (penalty tables) - DeepSeek handles these well
+                Time_Penalty_Tables: article.Time_Penalty_Tables || undefined
+            };
+        } else {
+            // English: Keep full content
+            optimized[mainKey][articleKey] = article;
+        }
+    });
+    
+    return optimized;
+}
+
+/**
+ * Preprocess Arabic text for optimal DeepSeek processing
+ */
+function preprocessArabicText(text) {
+    if (!text) return '';
+    
+    // Remove mixed script issues (Arabic + Latin)
+    // Split English and Arabic content to prevent DeepSeek mixing scripts
+    const cleanText = text
+        .replace(/([a-zA-Z]+)/g, ' $1 ') // Space around English words
+        .replace(/\s+/g, ' ') // Normalize spaces
+        .trim();
+    
+    return cleanText;
+}
+
+/**
+ * Create streaming chat payload - optimized for Vercel's longer timeout
+ */
+function createStreamingChatPayload(query, language, documents) {
+    const isArabic = language === 'ar';
+    
+    // Simplified prompt optimized for MSA (Modern Standard Arabic)
+    const systemPrompt = isArabic 
+        ? `أجب بالعربية الفصحى فقط. ابحث في قوانين ITPF:
+
+${JSON.stringify(documents, null, 0)}`
+        : `Respond in English only. Search ITPF rules:
+
+${JSON.stringify(documents, null, 0)}`;
+
+    const userPrompt = isArabic 
+        ? `سؤال: ${query}
+
+أجب بـ JSON فقط:
+{
+  "results": [
+    {
+      "article_number": "رقم المادة",
+      "title": "العنوان", 
+      "relevant_text": "النص",
+      "explanation": "الشرح",
+      "score": رقم
+    }
+  ]
+}`
+        : `Query: ${query}
+
+JSON only:
+{
+  "results": [
+    {
+      "article_number": "Article number",
+      "title": "Title",
+      "relevant_text": "Text", 
+      "explanation": "Explanation",
+      "score": number
+    }
+  ]
+}`;
+
+    return {
+        model: isArabic ? "deepseek-reasoner" : "deepseek-chat",
+        messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+        ],
+        temperature: 0.6, // Optimal for Arabic based on research
+        max_tokens: isArabic ? 800 : 1200,
+        stream: true, // Enable streaming!
+        response_format: { type: "json_object" }
+    };
+}
+
+/**
+ * Get next available API key with load balancing
+ */
+function getNextApiKey(language = 'en', retryCount = 0) {
+    if (DEEPSEEK_API_KEYS.length === 0) {
+        throw new Error('No DeepSeek API keys configured');
+    }
+    
+    // Language-specific key selection + retry offset
+    let index;
+    if (language === 'ar') {
+        // Prefer keys 1 and 2 for Arabic (heavier processing)
+        index = (retryCount + 1) % DEEPSEEK_API_KEYS.length;
+    } else {
+        // Prefer key 0 for English (lighter processing)
+        index = retryCount % DEEPSEEK_API_KEYS.length;
+    }
+    
+    return DEEPSEEK_API_KEYS[index];
+}
+
+/**
+ * Revolutionary streaming API call with Vercel's 5-minute timeout!
+ */
+function streamDeepSeekAPI(payload, language) {
+    return new Promise((resolve, reject) => {
+        const postData = JSON.stringify(payload);
+        const url = new URL(DEEPSEEK_API_ENDPOINT);
+        
+        let apiKey;
+        try {
+            apiKey = getNextApiKey(language, 0);
+        } catch (error) {
+            reject({
+                error: 'No API keys available',
+                message: language === 'ar' 
+                    ? 'خطأ في إعدادات الخدمة'
+                    : 'Service configuration error'
+            });
+            return;
+        }
+        
+        const options = {
+            hostname: url.hostname,
+            port: url.port || 443,
+            path: url.pathname,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(postData),
+                'Authorization': `Bearer ${apiKey}`,
+                'Accept': 'text/event-stream', // Accept SSE
+                'Cache-Control': 'no-cache',
+                'User-Agent': 'ITPF-Legal-Search/3.0-Vercel'
+            }
+        };
+
+        console.log(`🚀 Using Vercel streaming API for ${language} - 5 MINUTE TIMEOUT!`);
+
+        const req = https.request(options, (res) => {
+            let streamData = '';
+            let lastEventData = '';
+            
+            res.on('data', (chunk) => {
+                const chunkStr = chunk.toString();
+                streamData += chunkStr;
+                
+                // Process SSE events
+                const events = chunkStr.split('\n\n');
+                events.forEach(event => {
+                    if (event.startsWith('data: ')) {
+                        const data = event.slice(6);
+                        if (data === '[DONE]') {
+                            // Stream complete
+                            return;
+                        }
+                        if (data.trim() && data !== 'keep-alive') {
+                            try {
+                                const parsed = JSON.parse(data);
+                                if (parsed.choices && parsed.choices[0]) {
+                                    const delta = parsed.choices[0].delta;
+                                    if (delta && delta.content) {
+                                        lastEventData += delta.content;
+                                    }
+                                    // Check if message is complete
+                                    if (parsed.choices[0].finish_reason === 'stop') {
+                                        resolve({
+                                            choices: [{
+                                                message: {
+                                                    content: lastEventData
+                                                },
+                                                finish_reason: 'stop'
+                                            }]
+                                        });
+                                    }
+                                }
+                            } catch (parseError) {
+                                // Continue collecting data
+                            }
+                        }
+                    }
+                });
+            });
+            
+            res.on('end', () => {
+                if (lastEventData) {
+                    resolve({
+                        choices: [{
+                            message: {
+                                content: lastEventData
+                            },
+                            finish_reason: 'stop'
+                        }]
+                    });
+                } else {
+                    reject({
+                        error: 'Empty stream response',
+                        message: language === 'ar' 
+                            ? 'لم يتم تلقي استجابة'
+                            : 'No response received'
+                    });
+                }
+            });
+        });
+
+        req.on('error', (error) => {
+            reject({
+                error: `Streaming error: ${error.message}`,
+                message: language === 'ar' 
+                    ? 'خطأ في الاتصال المباشر'
+                    : 'Streaming connection error'
+            });
+        });
+
+        // Extended timeout for Vercel - 280 seconds!
+        req.setTimeout(REQUEST_TIMEOUT, () => {
+            req.destroy();
+            reject({
+                error: 'Request timeout after 280 seconds',
+                message: language === 'ar' 
+                    ? 'انتهت مهلة البحث المطولة'
+                    : 'Extended search timeout'
+            });
+        });
+
+        req.write(postData);
+        req.end();
+    });
+}
+
+/**
+ * Process search results from DeepSeek API
+ */
+function processSearchResults(apiResponse, language) {
+    try {
+        // Parse the JSON response from DeepSeek
+        let parsedContent;
+        try {
+            const responseContent = apiResponse.choices[0].message.content;
+            parsedContent = JSON.parse(responseContent);
+        } catch (parseError) {
+            console.error('Failed to parse DeepSeek response:', parseError);
+            throw new Error('Invalid response format from DeepSeek API');
+        }
+
+        const results = parsedContent.results || [];
+        
+        if (results.length === 0) {
+            return {
+                success: true,
+                hasResults: false,
+                message: language === 'ar' 
+                    ? 'لم يتم العثور على نتائج مطابقة لاستعلامك. يرجى المحاولة بكلمات مختلفة.'
+                    : 'No matching results found for your query. Please try different keywords.',
+                results: [],
+                metadata: {
+                    total_results: 0,
+                    language: language
+                }
+            };
+        }
+        
+        const processedResults = results.slice(0, 3).map((result, index) => ({
+            id: `result_${index}`,
+            title: result.title || (language === 'ar' ? `نتيجة ${index + 1}` : `Result ${index + 1}`),
+            content: result.relevant_text || '',
+            highlights: result.explanation ? [result.explanation] : [],
+            score: result.score || 0,
+            source: {
+                article: result.article_number || 'Unknown',
+                section: 'Legal Rules',
+                document: 'ITPF Legal Rules'
+            }
+        }));
+        
+        return {
+            success: true,
+            hasResults: true,
+            message: language === 'ar' 
+                ? `تم العثور على ${processedResults.length} نتائج ذات صلة`
+                : `Found ${processedResults.length} relevant results`,
+            results: processedResults,
+            metadata: {
+                total_results: results.length,
+                returned_results: processedResults.length,
+                language: language,
+                platform: 'Vercel Pro'
+            }
+        };
+        
+    } catch (error) {
+        console.error('Error processing search results:', error);
+        throw new Error('Failed to process search results');
+    }
+}
+
+/**
+ * Main Vercel Function Handler - With 5-minute timeout support!
+ */
+export default async function handler(req, res) {
+    // Handle CORS preflight requests
+    if (req.method === 'OPTIONS') {
+        return res.status(200).json({});
+    }
+    
+    try {
+        // Check API keys
+        if (DEEPSEEK_API_KEYS.length === 0) {
+            console.error('No DeepSeek API keys configured');
+            return res.status(500).json({
+                success: false,
+                error: 'API configuration error',
+                message: 'Search service is not properly configured'
+            });
+        }
+        
+        console.log(`🚀 Vercel Pro: Available API keys: ${DEEPSEEK_API_KEYS.length}`);
+        
+        // Extract parameters from request
+        let query, language;
+        
+        if (req.method === 'POST') {
+            query = req.body.query;
+            language = req.body.language || 'en';
+        } else if (req.method === 'GET') {
+            query = req.query.query || req.query.q;
+            language = req.query.language || req.query.lang || 'en';
+        } else {
+            return res.status(405).json({
+                success: false,
+                error: 'Method not allowed',
+                message: 'Only GET and POST methods are supported'
+            });
+        }
+        
+        // Validate request
+        const validation = validateRequest(query, language);
+        if (!validation.isValid) {
+            return res.status(400).json({
+                success: false,
+                error: 'Validation failed',
+                message: validation.errors.join('; '),
+                details: validation.errors
+            });
+        }
+        
+        // Load legal documents
+        const documents = loadLegalDocuments(language);
+        if (!documents) {
+            return res.status(500).json({
+                success: false,
+                error: 'Document loading error',
+                message: language === 'ar' 
+                    ? 'فشل في تحميل الوثائق القانونية'
+                    : 'Failed to load legal documents'
+            });
+        }
+
+        console.log(`🎯 Processing "${query}" in ${language} with 5-minute timeout!`);
+        
+        // Use optimized documents and streaming
+        const optimizedDocs = optimizeDocumentsForArabic(documents, language);
+        const chatPayload = createStreamingChatPayload(query, language, optimizedDocs);
+        
+        // Use streaming API with extended timeout
+        const streamResponse = await streamDeepSeekAPI(chatPayload, language);
+        
+        // Process and return results
+        const processedResults = processSearchResults(streamResponse, language);
+        
+        console.log(`✅ Successfully processed ${language} query in Vercel Pro!`);
+        
+        return res.status(200).json(processedResults);
+        
+    } catch (error) {
+        console.error('Vercel search function error:', error);
+        
+        const errorMessage = error.message || (
+            language === 'ar' 
+                ? 'حدث خطأ غير متوقع. يرجى المحاولة لاحقاً.'
+                : 'An unexpected error occurred. Please try again later.'
+        );
+        
+        return res.status(error.statusCode || 500).json({
+            success: false,
+            error: 'Search failed',
+            message: errorMessage,
+            platform: 'Vercel Pro',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+}

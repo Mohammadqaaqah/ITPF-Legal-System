@@ -1,0 +1,38 @@
+{
+  "name": "itpf-legal-query-system",
+  "version": "1.0.0",
+  "description": "Bilingual legal query system for ITPF using DeepSeek API",
+  "main": "index.html",
+  "scripts": {
+    "dev": "netlify dev",
+    "build": "echo 'No build process required'",
+    "deploy": "netlify deploy --prod",
+    "index": "node indexing_script.js",
+    "test": "echo 'No tests specified'",
+    "serve": "python -m http.server 8000 || python3 -m http.server 8000"
+  },
+  "keywords": [
+    "legal",
+    "search",
+    "bilingual",
+    "arabic",
+    "english",
+    "tent-pegging",
+    "itpf",
+    "netlify",
+    "deepseek"
+  ],
+  "author": "ITPF Development Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/itpf-legal-query.git"
+  },
+  "homepage": "https://your-site-name.netlify.app"
+}

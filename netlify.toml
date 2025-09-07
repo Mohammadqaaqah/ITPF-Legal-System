@@ -1,0 +1,77 @@
+# Netlify configuration file for ITPF Legal Query System
+
+[build]
+  # Build command (if you have a build process)
+  command = "echo 'No build process required'"
+  
+  # Directory to publish (root directory contains index.html)
+  publish = "."
+  
+  # Functions directory
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "18"
+
+# Headers for security and performance
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Security headers
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    
+    # Performance headers
+    Cache-Control = "public, max-age=31536000"
+    
+    # CORS headers for API calls
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET, POST, OPTIONS"
+    Access-Control-Allow-Headers = "Content-Type, Authorization"
+
+# Specific headers for HTML files
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
+
+# Headers for API functions
+[[headers]]
+  for = "/.netlify/functions/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET, POST, OPTIONS"
+    Access-Control-Allow-Headers = "Content-Type, Authorization"
+
+# Function timeout settings
+[functions]
+  # Pro plan supports up to 26 seconds
+  [functions.searchFunction]
+    timeout = 26
+
+# Redirect rules
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# Handle SPA routing (if needed in future)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+  conditions = {Role = ["admin"]}
+
+# Environment-specific redirects
+[[redirects]]
+  from = "/search"
+  to = "/.netlify/functions/searchFunction"
+  status = 200
+
+# Handle 404s
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 404
