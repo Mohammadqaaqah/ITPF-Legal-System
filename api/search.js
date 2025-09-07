@@ -51,17 +51,47 @@ function validateRequest(query, language) {
 function loadLegalDocuments(language) {
     try {
         // CRITICAL: Load COMPLETE authentic legal documents - all 154 articles + appendices 9&10
-        // For Vercel - embed data directly in function to avoid path issues
         console.log(`🗂️ Loading COMPLETE AUTHENTIC ${language} legal rules (154 articles + appendices 9&10)`);
         
         let parsedData;
         
-        if (language === 'ar') {
-            // Load complete authentic Arabic data from embedded module
-            parsedData = require('./arabic_data.js');
-        } else {
-            // Load complete authentic English data from embedded module  
-            parsedData = require('./english_data.js');
+        try {
+            if (language === 'ar') {
+                // Try multiple loading methods for Arabic data
+                console.log('🔍 Attempting to load Arabic data...');
+                try {
+                    parsedData = require('./arabic_data.js');
+                    console.log('✅ Loaded from arabic_data.js');
+                } catch (jsError) {
+                    console.log(`❌ arabic_data.js failed: ${jsError.message}`);
+                    try {
+                        parsedData = require('./arabic_legal_rules_complete_authentic.json');
+                        console.log('✅ Loaded from arabic JSON file');
+                    } catch (jsonError) {
+                        console.log(`❌ Arabic JSON failed: ${jsonError.message}`);
+                        throw new Error(`Both JS and JSON loading failed for Arabic: JS(${jsError.message}) JSON(${jsonError.message})`);
+                    }
+                }
+            } else {
+                // Try multiple loading methods for English data  
+                console.log('🔍 Attempting to load English data...');
+                try {
+                    parsedData = require('./english_data.js');
+                    console.log('✅ Loaded from english_data.js');
+                } catch (jsError) {
+                    console.log(`❌ english_data.js failed: ${jsError.message}`);
+                    try {
+                        parsedData = require('./english_legal_rules_complete_authentic.json');
+                        console.log('✅ Loaded from English JSON file');
+                    } catch (jsonError) {
+                        console.log(`❌ English JSON failed: ${jsonError.message}`);
+                        throw new Error(`Both JS and JSON loading failed for English: JS(${jsError.message}) JSON(${jsonError.message})`);
+                    }
+                }
+            }
+        } catch (loadError) {
+            console.error(`❌ CRITICAL: Failed to load any data files: ${loadError.message}`);
+            throw loadError;
         }
         
         // CRITICAL VERIFICATION: Ensure we have all 154 articles
