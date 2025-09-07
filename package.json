@@ -5,7 +5,7 @@
   "main": "index.html",
   "scripts": {
     "dev": "netlify dev",
-    "build": "echo 'No build process required'",
+    "build": "mkdir -p public && cp *.html *.css *.js *.json public/ 2>/dev/null && echo 'Build completed - files copied to public/'",
     "deploy": "netlify deploy --prod",
     "index": "node indexing_script.js",
     "test": "echo 'No tests specified'",
