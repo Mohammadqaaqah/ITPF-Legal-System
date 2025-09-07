@@ -57,11 +57,11 @@ function loadLegalDocuments(language) {
         let parsedData;
         
         if (language === 'ar') {
-            // Direct require for Arabic file - same directory as function
-            parsedData = require('./arabic_legal_rules_complete_authentic.json');
+            // Load complete authentic Arabic data from embedded module
+            parsedData = require('./arabic_data.js');
         } else {
-            // Direct require for English file - same directory as function  
-            parsedData = require('./english_legal_rules_complete_authentic.json');
+            // Load complete authentic English data from embedded module  
+            parsedData = require('./english_data.js');
         }
         
         // CRITICAL VERIFICATION: Ensure we have all 154 articles
