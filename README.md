@@ -274,4 +274,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Made with ❤️ for the International Tent Pegging Federation**
 
-*Search legal documents intelligently in Arabic and English*
+*Search legal documents intelligently in Arabic and English*# Last updated: Sun Sep  7 17:02:41 +03 2025
