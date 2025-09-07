@@ -66,9 +66,9 @@ function loadLegalDocuments(language) {
     try {
         // Always load ALL documents - legal texts are interconnected and important
         if (language === 'ar') {
-            return require('../../arabic_rules.json');
+            return require('../../arabic_legal_rules_complete_authentic.json');
         } else {
-            return require('../../english_rules.json');
+            return require('../../english_legal_rules_complete_authentic.json');
         }
     } catch (error) {
         console.error(`Error loading ${language} documents:`, error);
@@ -83,32 +83,73 @@ function loadLegalDocuments(language) {
  * @returns {Object} Optimized documents for Arabic/RTL processing
  */
 function optimizeDocumentsForArabic(documents, language) {
-    const optimized = {};
-    const mainKey = Object.keys(documents)[0];
+    console.log(`🔧 Optimizing COMPLETE AUTHENTIC ${language} legal database...`);
     
-    if (!documents[mainKey]) return optimized;
+    const optimized = { articles: [] };
     
-    const articles = documents[mainKey];
-    optimized[mainKey] = {};
-    
-    Object.keys(articles).forEach(articleKey => {
-        const article = articles[articleKey];
-        
-        if (language === 'ar') {
-            // Arabic-specific optimizations based on DeepSeek capabilities
-            optimized[mainKey][articleKey] = {
-                title: article.title,
-                // Use Modern Standard Arabic (MSA) - better supported
-                text: preprocessArabicText(article.text || ''),
-                // Keep structured data (penalty tables) - DeepSeek handles these well
-                Time_Penalty_Tables: article.Time_Penalty_Tables || undefined
-            };
-        } else {
-            // English: Keep full content
-            optimized[mainKey][articleKey] = article;
+    if (language === 'ar') {
+        // Handle the NEW AUTHENTIC Arabic structure
+        if (documents.articles && Array.isArray(documents.articles)) {
+            documents.articles.forEach(article => {
+                optimized.articles.push({
+                    article: article.article_number,
+                    title: preprocessArabicText(article.title || ''),
+                    content: preprocessArabicText(article.content || ''),
+                    section: article.section || 'قوانين ITPF',
+                    source_document: 'قوانين الاتحاد الدولي لالتقاط الأوتاد الأصيلة',
+                    subsections: article.subsections || []
+                });
+            });
         }
-    });
+        
+        // Handle appendices
+        if (documents.appendices && Array.isArray(documents.appendices)) {
+            documents.appendices.forEach(appendix => {
+                optimized.articles.push({
+                    article: appendix.appendix_number,
+                    title: preprocessArabicText(appendix.title || ''),
+                    content: preprocessArabicText(appendix.content || ''),
+                    section: 'الملاحق',
+                    source_document: 'قوانين الاتحاد الدولي لالتقاط الأوتاد الأصيلة',
+                    subsections: appendix.subsections || []
+                });
+            });
+        }
+    } else {
+        // Handle the NEW AUTHENTIC English structure  
+        if (documents.chapters && Array.isArray(documents.chapters)) {
+            documents.chapters.forEach(chapter => {
+                if (chapter.articles && Array.isArray(chapter.articles)) {
+                    chapter.articles.forEach(article => {
+                        optimized.articles.push({
+                            article: article.article_number,
+                            title: article.title || '',
+                            content: article.content || '',
+                            section: chapter.title || 'ITPF Rules',
+                            source_document: 'ITPF Legal Rules Complete Authentic',
+                            subsections: article.subsections || []
+                        });
+                    });
+                }
+            });
+        }
+        
+        // Handle appendices  
+        if (documents.appendices && Array.isArray(documents.appendices)) {
+            documents.appendices.forEach(appendix => {
+                optimized.articles.push({
+                    article: appendix.appendix_number,
+                    title: appendix.title || '',
+                    content: appendix.content || '',
+                    section: 'Appendices',
+                    source_document: 'ITPF Legal Rules Complete Authentic',
+                    subsections: appendix.subsections || []
+                });
+            });
+        }
+    }
     
+    console.log(`✅ Optimized ${optimized.articles.length} articles for ${language} processing`);
     return optimized;
 }
 
