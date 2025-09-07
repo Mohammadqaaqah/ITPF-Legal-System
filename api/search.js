@@ -72,7 +72,22 @@ async function loadLegalDocuments(language) {
                 } catch (jsError) {
                     console.log(`❌ arabic_data.js failed: ${jsError.message}`);
                     try {
-                        parsedData = JSON.parse(fs.readFileSync(path.join(__dirname, 'arabic_legal_rules_complete_fixed.json'), 'utf8'));
+                        // Load 3 split files and combine them
+        const part1 = JSON.parse(fs.readFileSync(path.join(__dirname, 'arabic_part1.json'), 'utf8'));
+        const part2 = JSON.parse(fs.readFileSync(path.join(__dirname, 'arabic_part2.json'), 'utf8'));
+        const part3 = JSON.parse(fs.readFileSync(path.join(__dirname, 'arabic_part3.json'), 'utf8'));
+        
+        // Combine all parts
+        parsedData = {
+            metadata: {
+                title: "ITPF Legal Rules - Complete Arabic",
+                language: "ar",
+                total_articles: part1.articles.length + part2.articles.length + part3.articles.length,
+                assembled_from: "3_split_files"
+            },
+            articles: [...part1.articles, ...part2.articles, ...part3.articles],
+            appendices: part3.appendices
+        };
                         console.log('✅ Loaded from arabic JSON file');
                     } catch (jsonError) {
                         console.log(`❌ Arabic JSON failed: ${jsonError.message}`);
@@ -89,7 +104,22 @@ async function loadLegalDocuments(language) {
                 } catch (jsError) {
                     console.log(`❌ english_data.js failed: ${jsError.message}`);
                     try {
-                        parsedData = JSON.parse(fs.readFileSync(path.join(__dirname, 'english_legal_rules_complete_rebuild.json'), 'utf8'));
+                        // Load 3 split files and combine them
+        const part1 = JSON.parse(fs.readFileSync(path.join(__dirname, 'english_part1.json'), 'utf8'));
+        const part2 = JSON.parse(fs.readFileSync(path.join(__dirname, 'english_part2.json'), 'utf8'));
+        const part3 = JSON.parse(fs.readFileSync(path.join(__dirname, 'english_part3.json'), 'utf8'));
+        
+        // Combine all parts
+        parsedData = {
+            metadata: {
+                title: "ITPF Legal Rules - Complete English",
+                language: "en",
+                total_articles: part1.articles.length + part2.articles.length + part3.articles.length,
+                assembled_from: "3_split_files"
+            },
+            articles: [...part1.articles, ...part2.articles, ...part3.articles],
+            appendices: part3.appendices
+        };
                         console.log('✅ Loaded from English JSON file');
                     } catch (jsonError) {
                         console.log(`❌ English JSON failed: ${jsonError.message}`);
