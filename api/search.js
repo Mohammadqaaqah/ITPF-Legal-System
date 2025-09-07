@@ -57,11 +57,11 @@ function loadLegalDocuments(language) {
         let parsedData;
         
         if (language === 'ar') {
-            // Direct require for Arabic file - Vercel will bundle it
-            parsedData = require('../arabic_legal_rules_complete_authentic.json');
+            // Direct require for Arabic file - same directory as function
+            parsedData = require('./arabic_legal_rules_complete_authentic.json');
         } else {
-            // Direct require for English file - Vercel will bundle it  
-            parsedData = require('../english_legal_rules_complete_authentic.json');
+            // Direct require for English file - same directory as function  
+            parsedData = require('./english_legal_rules_complete_authentic.json');
         }
         
         // CRITICAL VERIFICATION: Ensure we have all 154 articles
