@@ -277,7 +277,8 @@ function preprocessArabicText(text) {
  * Smart Query Partitioning for Arabic - Revolutionary Solution!
  */
 function shouldUsePartitioning(query, language) {
-    return language === 'ar' && query.trim().length > 8;
+    // Disable partitioning to prevent incomplete results
+    return false;
 }
 
 function partitionDocuments(documents) {
