@@ -206,7 +206,7 @@ class ITTPFLegalSearch {
         this.showLoadingState();
         
         try {
-            const response = await fetch('/.netlify/functions/searchFunction', {
+            const response = await fetch('/api/search', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

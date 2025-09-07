@@ -112,6 +112,95 @@ function preprocessArabicText(text) {
 }
 
 /**
+ * Smart Query Partitioning for Arabic - Revolutionary Solution!
+ */
+function shouldUsePartitioning(query, language) {
+    return language === 'ar' && query.trim().length > 8;
+}
+
+function partitionDocuments(documents) {
+    const mainKey = Object.keys(documents)[0];
+    if (!documents[mainKey]) return [documents];
+    
+    const articles = documents[mainKey];
+    const articleKeys = Object.keys(articles);
+    const partitionSize = Math.ceil(articleKeys.length / 3); // Split into 3 parts
+    
+    const partitions = [];
+    for (let i = 0; i < articleKeys.length; i += partitionSize) {
+        const partitionKeys = articleKeys.slice(i, i + partitionSize);
+        const partition = { [mainKey]: {} };
+        
+        partitionKeys.forEach(key => {
+            partition[mainKey][key] = articles[key];
+        });
+        
+        partitions.push(partition);
+    }
+    
+    return partitions;
+}
+
+/**
+ * Process Partitioned Query - Preserves ALL Arabic text integrity
+ */
+async function processPartitionedQuery(query, language, documents) {
+    const partitions = partitionDocuments(documents);
+    const allResults = [];
+    
+    console.log(`🧩 Smart partitioning: Processing ${partitions.length} document chunks`);
+    
+    for (let i = 0; i < partitions.length; i++) {
+        console.log(`📑 Processing partition ${i + 1}/${partitions.length}`);
+        
+        try {
+            const chatPayload = createStreamingChatPayload(query, language, partitions[i]);
+            const response = await streamDeepSeekAPI(chatPayload, language);
+            
+            if (response && response.choices && response.choices[0]) {
+                try {
+                    const content = response.choices[0].message.content;
+                    const parsed = JSON.parse(content);
+                    if (parsed.results && Array.isArray(parsed.results)) {
+                        allResults.push(...parsed.results);
+                    }
+                } catch (parseError) {
+                    console.log(`⚠️ Parse error in partition ${i + 1}, skipping`);
+                }
+            }
+        } catch (partitionError) {
+            console.log(`⚠️ Error in partition ${i + 1}, continuing with others`);
+        }
+    }
+    
+    // Merge and rank results
+    const uniqueResults = [];
+    const seenArticles = new Set();
+    
+    allResults.forEach(result => {
+        const articleId = result.article_number || `result_${uniqueResults.length}`;
+        if (!seenArticles.has(articleId)) {
+            seenArticles.add(articleId);
+            uniqueResults.push(result);
+        }
+    });
+    
+    // Sort by score descending
+    uniqueResults.sort((a, b) => (b.score || 0) - (a.score || 0));
+    
+    return {
+        choices: [{
+            message: {
+                content: JSON.stringify({
+                    results: uniqueResults.slice(0, 3) // Top 3 results
+                })
+            },
+            finish_reason: 'stop'
+        }]
+    };
+}
+
+/**
  * Create streaming chat payload - optimized for Vercel's longer timeout
  */
 function createStreamingChatPayload(query, language, documents) {
@@ -449,12 +538,19 @@ export default async function handler(req, res) {
 
         console.log(`🎯 Processing "${query}" in ${language} with 5-minute timeout!`);
         
-        // Use optimized documents and streaming
+        // Use optimized documents
         const optimizedDocs = optimizeDocumentsForArabic(documents, language);
-        const chatPayload = createStreamingChatPayload(query, language, optimizedDocs);
         
-        // Use streaming API with extended timeout
-        const streamResponse = await streamDeepSeekAPI(chatPayload, language);
+        // Revolutionary Smart Partitioning for Arabic!
+        let streamResponse;
+        if (shouldUsePartitioning(query, language)) {
+            console.log(`🧩 Using smart partitioning for Arabic query: "${query}"`);
+            streamResponse = await processPartitionedQuery(query, language, optimizedDocs);
+        } else {
+            // Regular streaming for English or simple queries
+            const chatPayload = createStreamingChatPayload(query, language, optimizedDocs);
+            streamResponse = await streamDeepSeekAPI(chatPayload, language);
+        }
         
         // Process and return results
         const processedResults = processSearchResults(streamResponse, language);
