@@ -1,6 +1,4 @@
 {
-  "buildCommand": "mkdir -p public && cp *.html *.css *.js *.json public/ 2>/dev/null || true",
-  "outputDirectory": "public",
   "functions": {
     "api/search.js": {
       "maxDuration": 300

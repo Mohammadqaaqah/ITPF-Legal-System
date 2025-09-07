@@ -51,51 +51,18 @@ function validateRequest(query, language) {
 function loadLegalDocuments(language) {
     try {
         // CRITICAL: Load COMPLETE authentic legal documents - all 154 articles + appendices 9&10
-        // Multiple path attempts to ensure file is found in different deployment environments
-        const fs = require('fs');
-        const path = require('path');
+        // For Vercel - embed data directly in function to avoid path issues
+        console.log(`🗂️ Loading COMPLETE AUTHENTIC ${language} legal rules (154 articles + appendices 9&10)`);
         
-        let filePath;
-        let fileName;
+        let parsedData;
         
         if (language === 'ar') {
-            fileName = 'arabic_legal_rules_complete_authentic.json';
-            console.log('🗂️ Loading COMPLETE AUTHENTIC Arabic legal rules (154 articles + appendices 9&10)');
+            // Direct require for Arabic file - Vercel will bundle it
+            parsedData = require('../arabic_legal_rules_complete_authentic.json');
         } else {
-            fileName = 'english_legal_rules_complete_authentic.json';
-            console.log('🗂️ Loading COMPLETE AUTHENTIC English legal rules (154 articles + appendices 9&10)');
+            // Direct require for English file - Vercel will bundle it  
+            parsedData = require('../english_legal_rules_complete_authentic.json');
         }
-        
-        // Try multiple possible paths for Vercel deployment compatibility
-        const possiblePaths = [
-            path.join(process.cwd(), fileName),           // Root directory
-            path.join(__dirname, '..', fileName),        // Parent of api folder
-            path.join(__dirname, '..', '..', fileName),  // Two levels up
-            fileName                                     // Current directory
-        ];
-        
-        let data = null;
-        let usedPath = null;
-        
-        for (const testPath of possiblePaths) {
-            try {
-                if (fs.existsSync(testPath)) {
-                    data = fs.readFileSync(testPath, 'utf8');
-                    usedPath = testPath;
-                    console.log(`✅ Found complete authentic file at: ${testPath}`);
-                    break;
-                }
-            } catch (pathError) {
-                console.log(`❌ Path not accessible: ${testPath}`);
-                continue;
-            }
-        }
-        
-        if (!data) {
-            throw new Error(`Complete authentic file not found: ${fileName}`);
-        }
-        
-        const parsedData = JSON.parse(data);
         
         // CRITICAL VERIFICATION: Ensure we have all 154 articles
         if (!parsedData.metadata || parsedData.metadata.total_articles !== 154) {
