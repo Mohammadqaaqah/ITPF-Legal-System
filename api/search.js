@@ -88,11 +88,11 @@ function optimizeDocumentsForArabic(documents, language) {
         if (language === 'ar') {
             // Arabic-specific optimizations based on DeepSeek capabilities
             optimized[mainKey][articleKey] = {
-                title: article.title,
+                title: article.عنوان || article.title,
                 // Use Modern Standard Arabic (MSA) - better supported
-                text: preprocessArabicText(article.text || ''),
+                text: preprocessArabicText(article.نص || article.text || ''),
                 // Keep structured data (penalty tables) - DeepSeek handles these well
-                Time_Penalty_Tables: article.Time_Penalty_Tables || undefined
+                Time_Penalty_Tables: article.جداول_العقوبات_الزمنية || article.Time_Penalty_Tables || undefined
             };
         } else {
             // English: Keep full content
