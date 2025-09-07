@@ -50,23 +50,42 @@ function validateRequest(query, language) {
  */
 function loadLegalDocuments(language) {
     try {
-        // Always load ALL documents - legal texts are interconnected and important
+        // Load COMPLETE legal documents - all 154 articles with appendices
+        const fs = require('fs');
+        const path = require('path');
+        
+        let filePath;
         if (language === 'ar') {
-            const fs = require('fs');
-            const path = require('path');
-            const filePath = path.join(process.cwd(), 'arabic_rules.json');
-            const data = fs.readFileSync(filePath, 'utf8');
-            return JSON.parse(data);
+            filePath = path.join(process.cwd(), 'arabic_rules_complete.json');
+            console.log('🗂️ Loading COMPLETE Arabic legal rules (154 articles + appendices)');
         } else {
+            filePath = path.join(process.cwd(), 'english_rules_complete.json');
+            console.log('🗂️ Loading COMPLETE English legal rules (154 articles + appendices)');
+        }
+        
+        const data = fs.readFileSync(filePath, 'utf8');
+        const parsedData = JSON.parse(data);
+        
+        // Log comprehensive data loaded
+        console.log(`✅ Loaded ${parsedData.total_articles} articles with complete appendices for ${language}`);
+        
+        return parsedData;
+    } catch (error) {
+        console.error(`❌ Error loading COMPLETE ${language} documents:`, error);
+        
+        // Fallback to old incomplete files if complete files not found
+        try {
             const fs = require('fs');
             const path = require('path');
-            const filePath = path.join(process.cwd(), 'english_rules.json');
-            const data = fs.readFileSync(filePath, 'utf8');
-            return JSON.parse(data);
+            const fallbackFile = language === 'ar' ? 'arabic_rules.json' : 'english_rules.json';
+            const fallbackPath = path.join(process.cwd(), fallbackFile);
+            const fallbackData = fs.readFileSync(fallbackPath, 'utf8');
+            console.warn(`⚠️ Using fallback incomplete legal rules for ${language}`);
+            return JSON.parse(fallbackData);
+        } catch (fallbackError) {
+            console.error(`❌ Failed to load any legal documents for ${language}:`, fallbackError);
+            return null;
         }
-    } catch (error) {
-        console.error(`Error loading ${language} documents:`, error);
-        return null;
     }
 }
 
@@ -74,31 +93,74 @@ function loadLegalDocuments(language) {
  * Optimize documents specifically for Arabic processing based on DeepSeek research
  */
 function optimizeDocumentsForArabic(documents, language) {
-    const optimized = {};
-    const mainKey = Object.keys(documents)[0];
+    if (!documents) return {};
     
-    if (!documents[mainKey]) return optimized;
+    console.log(`🔧 Optimizing complete ${language} legal database...`);
     
-    const articles = documents[mainKey];
-    optimized[mainKey] = {};
+    const optimized = {
+        language: documents.language,
+        title: documents.title,
+        total_articles: documents.total_articles,
+        articles: []
+    };
     
-    Object.keys(articles).forEach(articleKey => {
-        const article = articles[articleKey];
-        
-        if (language === 'ar') {
-            // Arabic-specific optimizations based on DeepSeek capabilities
-            optimized[mainKey][articleKey] = {
-                title: article.عنوان || article.title,
-                // Use Modern Standard Arabic (MSA) - better supported
-                text: preprocessArabicText(article.نص || article.text || ''),
-                // Keep structured data (penalty tables) - DeepSeek handles these well
-                Time_Penalty_Tables: article.جداول_العقوبات_الزمنية || article.Time_Penalty_Tables || undefined
-            };
-        } else {
-            // English: Keep full content
-            optimized[mainKey][articleKey] = article;
+    // Process all sections/chapters
+    const sections = documents.sections || documents.chapters || [];
+    
+    sections.forEach(section => {
+        if (section.articles) {
+            section.articles.forEach(article => {
+                if (language === 'ar') {
+                    // Arabic-specific optimizations for MSA
+                    optimized.articles.push({
+                        article: article.article,
+                        title: preprocessArabicText(article.title || ''),
+                        content: preprocessArabicText(article.content || ''),
+                        section: preprocessArabicText(section.section || section.chapter || ''),
+                        source_document: documents.title
+                    });
+                } else {
+                    // English: Keep full content
+                    optimized.articles.push({
+                        article: article.article,
+                        title: article.title || '',
+                        content: article.content || '',
+                        section: section.chapter || section.section || '',
+                        source_document: documents.title
+                    });
+                }
+            });
         }
     });
+    
+    // Add appendices if they exist
+    if (documents.appendices) {
+        documents.appendices.forEach(appendix => {
+            if (appendix.sections) {
+                appendix.sections.forEach((section, sectionIndex) => {
+                    if (language === 'ar') {
+                        optimized.articles.push({
+                            article: `${appendix.appendix_number}-${sectionIndex + 1}`,
+                            title: preprocessArabicText(section.section || appendix.title || ''),
+                            content: preprocessArabicText(section.content || ''),
+                            section: `ملحق ${appendix.appendix_number}`,
+                            source_document: documents.title
+                        });
+                    } else {
+                        optimized.articles.push({
+                            article: `${appendix.appendix_number}-${sectionIndex + 1}`,
+                            title: section.section || appendix.title || '',
+                            content: section.content || '',
+                            section: `Appendix ${appendix.appendix_number}`,
+                            source_document: documents.title
+                        });
+                    }
+                });
+            }
+        });
+    }
+    
+    console.log(`✅ Optimized ${optimized.articles.length} legal articles/sections for ${language}`);
     
     return optimized;
 }
@@ -127,25 +189,32 @@ function shouldUsePartitioning(query, language) {
 }
 
 function partitionDocuments(documents) {
-    const mainKey = Object.keys(documents)[0];
-    if (!documents[mainKey]) return [documents];
+    if (!documents || !documents.articles || !Array.isArray(documents.articles)) {
+        console.warn('⚠️ Invalid document structure for partitioning');
+        return [documents];
+    }
     
-    const articles = documents[mainKey];
-    const articleKeys = Object.keys(articles);
-    const partitionSize = Math.ceil(articleKeys.length / 3); // Split into 3 parts
+    const articles = documents.articles;
+    const partitionSize = Math.ceil(articles.length / 4); // Split into 4 parts for better processing
+    
+    console.log(`📑 Partitioning ${articles.length} articles into chunks of ${partitionSize}`);
     
     const partitions = [];
-    for (let i = 0; i < articleKeys.length; i += partitionSize) {
-        const partitionKeys = articleKeys.slice(i, i + partitionSize);
-        const partition = { [mainKey]: {} };
+    for (let i = 0; i < articles.length; i += partitionSize) {
+        const partitionArticles = articles.slice(i, i + partitionSize);
         
-        partitionKeys.forEach(key => {
-            partition[mainKey][key] = articles[key];
-        });
+        const partition = {
+            language: documents.language,
+            title: documents.title,
+            total_articles: documents.total_articles,
+            articles: partitionArticles,
+            partition_info: `${i + 1}-${Math.min(i + partitionSize, articles.length)} of ${articles.length}`
+        };
         
         partitions.push(partition);
     }
     
+    console.log(`✅ Created ${partitions.length} document partitions`);
     return partitions;
 }
 
