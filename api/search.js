@@ -56,11 +56,13 @@ function loadLegalDocuments(language) {
         
         let filePath;
         if (language === 'ar') {
-            filePath = path.join(process.cwd(), 'arabic_rules_complete.json');
-            console.log('🗂️ Loading COMPLETE Arabic legal rules (154 articles + appendices)');
+            // Use the COMPLETE authentic Arabic legal rules file (154 articles + appendices)
+            filePath = path.join(process.cwd(), 'arabic_legal_rules_complete_authentic.json');
+            console.log('🗂️ Loading COMPLETE AUTHENTIC Arabic legal rules (154 articles + appendices 9&10)');
         } else {
-            filePath = path.join(process.cwd(), 'english_rules_complete.json');
-            console.log('🗂️ Loading COMPLETE English legal rules (154 articles + appendices)');
+            // Use the COMPLETE authentic English legal rules file (154 articles + appendices)
+            filePath = path.join(process.cwd(), 'english_legal_rules_complete_authentic.json');
+            console.log('🗂️ Loading COMPLETE AUTHENTIC English legal rules (154 articles + appendices 9&10)');
         }
         
         const data = fs.readFileSync(filePath, 'utf8');
@@ -95,72 +97,81 @@ function loadLegalDocuments(language) {
 function optimizeDocumentsForArabic(documents, language) {
     if (!documents) return {};
     
-    console.log(`🔧 Optimizing complete ${language} legal database...`);
+    console.log(`🔧 Optimizing COMPLETE AUTHENTIC ${language} legal database...`);
     
     const optimized = {
-        language: documents.language,
-        title: documents.title,
-        total_articles: documents.total_articles,
+        language: language,
+        title: language === 'ar' ? documents.metadata?.title || 'قوانين الاتحاد الدولي لالتقاط الأوتاد' : documents.metadata?.title || documents.title || 'ITPF Legal Rules',
+        total_articles: documents.metadata?.total_articles || 0,
         articles: []
     };
     
-    // Process all sections/chapters
-    const sections = documents.sections || documents.chapters || [];
-    
-    sections.forEach(section => {
-        if (section.articles) {
-            section.articles.forEach(article => {
-                if (language === 'ar') {
-                    // Arabic-specific optimizations for MSA
-                    optimized.articles.push({
-                        article: article.article,
-                        title: preprocessArabicText(article.title || ''),
-                        content: preprocessArabicText(article.content || ''),
-                        section: preprocessArabicText(section.section || section.chapter || ''),
-                        source_document: documents.title
-                    });
-                } else {
-                    // English: Keep full content
-                    optimized.articles.push({
-                        article: article.article,
-                        title: article.title || '',
-                        content: article.content || '',
-                        section: section.chapter || section.section || '',
-                        source_document: documents.title
+    if (language === 'ar') {
+        // Handle the NEW AUTHENTIC Arabic structure
+        if (documents.articles && Array.isArray(documents.articles)) {
+            documents.articles.forEach(article => {
+                optimized.articles.push({
+                    article: article.article_number,
+                    title: preprocessArabicText(article.title || ''),
+                    content: preprocessArabicText(article.content || ''),
+                    section: article.section || 'قوانين ITPF',
+                    source_document: 'قوانين الاتحاد الدولي لالتقاط الأوتاد الأصيلة',
+                    subsections: article.subsections || []
+                });
+            });
+        }
+        
+        // Add appendices from Arabic document
+        if (documents.appendices && Array.isArray(documents.appendices)) {
+            documents.appendices.forEach(appendix => {
+                optimized.articles.push({
+                    article: `appendix_${appendix.appendix_number}`,
+                    title: preprocessArabicText(appendix.title || ''),
+                    content: preprocessArabicText(JSON.stringify(appendix.content || {}, null, 1)),
+                    section: `الملحق رقم ${appendix.appendix_number}`,
+                    source_document: 'قوانين الاتحاد الدولي لالتقاط الأوتاد الأصيلة',
+                    appendix_data: appendix.content
+                });
+            });
+        }
+    } else {
+        // Handle the NEW AUTHENTIC English structure
+        if (documents.chapters && Array.isArray(documents.chapters)) {
+            documents.chapters.forEach(chapter => {
+                if (chapter.articles && Array.isArray(chapter.articles)) {
+                    chapter.articles.forEach(article => {
+                        optimized.articles.push({
+                            article: article.article_number,
+                            title: article.title || '',
+                            content: article.content || '',
+                            section: chapter.title || '',
+                            source_document: documents.metadata?.title || 'ITPF Legal Rules Complete Authentic',
+                            subsections: article.subsections || []
+                        });
                     });
                 }
             });
         }
-    });
-    
-    // Add appendices if they exist
-    if (documents.appendices) {
-        documents.appendices.forEach(appendix => {
-            if (appendix.sections) {
-                appendix.sections.forEach((section, sectionIndex) => {
-                    if (language === 'ar') {
-                        optimized.articles.push({
-                            article: `${appendix.appendix_number}-${sectionIndex + 1}`,
-                            title: preprocessArabicText(section.section || appendix.title || ''),
-                            content: preprocessArabicText(section.content || ''),
-                            section: `ملحق ${appendix.appendix_number}`,
-                            source_document: documents.title
-                        });
-                    } else {
-                        optimized.articles.push({
-                            article: `${appendix.appendix_number}-${sectionIndex + 1}`,
-                            title: section.section || appendix.title || '',
-                            content: section.content || '',
-                            section: `Appendix ${appendix.appendix_number}`,
-                            source_document: documents.title
-                        });
-                    }
+        
+        // Add appendices from English document
+        if (documents.appendices && Array.isArray(documents.appendices)) {
+            documents.appendices.forEach(appendix => {
+                optimized.articles.push({
+                    article: `appendix_${appendix.appendix_number}`,
+                    title: appendix.title || '',
+                    content: JSON.stringify(appendix.content || {}, null, 1),
+                    section: `Appendix ${appendix.appendix_number}`,
+                    source_document: documents.metadata?.title || 'ITPF Legal Rules Complete Authentic',
+                    appendix_data: appendix.content
                 });
-            }
-        });
+            });
+        }
     }
     
-    console.log(`✅ Optimized ${optimized.articles.length} legal articles/sections for ${language}`);
+    optimized.total_articles = optimized.articles.length;
+    
+    console.log(`✅ Optimized ${optimized.articles.length} COMPLETE AUTHENTIC legal articles for ${language}`);
+    console.log(`📊 Document metadata: ${JSON.stringify(documents.metadata || {}, null, 1)}`);
     
     return optimized;
 }
