@@ -1,14 +1,22 @@
 {
   "name": "itpf-legal-search",
   "functions": {
-    "api/search.js": {
-      "maxDuration": 300
+    "api/main.py": {
+      "runtime": "python3.9",
+      "maxDuration": 300,
+      "memory": 4096
     }
   },
-  "rewrites": [
+  "builds": [
     {
-      "source": "/api/search",
-      "destination": "/api/search.js"
+      "src": "api/main.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "api/main.py"
     }
   ],
   "headers": [
