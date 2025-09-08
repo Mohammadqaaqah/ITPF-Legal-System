@@ -478,8 +478,7 @@ async def get_pinecone_stats():
         raise HTTPException(status_code=500, detail=str(e))
 
 # Main entry point for Vercel
-def handler(request: Request):
-    return app(request)
+app_handler = app
 
 if __name__ == "__main__":
     import uvicorn
