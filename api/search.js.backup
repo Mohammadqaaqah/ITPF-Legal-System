@@ -371,19 +371,83 @@ async function processPartitionedQuery(query, language, documents) {
 }
 
 /**
+ * Smart article finder - finds relevant articles based on query
+ */
+function findRelevantArticles(query, articles, isArabic) {
+    if (!articles || articles.length === 0) return [];
+    
+    const queryLower = query.toLowerCase();
+    const relevantArticles = [];
+    
+    // Extract article number if mentioned directly
+    const articleNumberMatch = query.match(/(\d+)/); // Any digits like 114, 144, etc.
+    if (articleNumberMatch) {
+        const requestedNumber = parseInt(articleNumberMatch[1]);
+        console.log(`🔍 Looking for article ${requestedNumber}...`);
+        
+        const directMatch = articles.find(a => 
+            a.article_number === requestedNumber || 
+            a.article_number === requestedNumber.toString() ||
+            parseInt(a.article_number) === requestedNumber
+        );
+        
+        if (directMatch) {
+            console.log(`✅ Found article ${requestedNumber}: ${directMatch.title}`);
+            relevantArticles.push(directMatch);
+            // Add surrounding articles for context
+            const index = articles.findIndex(a => a === directMatch);
+            if (index > 0) relevantArticles.push(articles[index - 1]);
+            if (index < articles.length - 1) relevantArticles.push(articles[index + 1]);
+        } else {
+            console.log(`❌ Article ${requestedNumber} not found in ${articles.length} articles`);
+            articles.slice(0, 5).forEach(a => console.log(`Available: ${a.article_number}`));
+        }
+    }
+    
+    // Find by keywords in title or content
+    articles.forEach(article => {
+        const titleLower = (article.title || '').toLowerCase();
+        const contentLower = (article.content || '').toLowerCase();
+        
+        // Simple keyword matching
+        if (queryLower.includes('حكام') || queryLower.includes('judge')) {
+            if (titleLower.includes('حكام') || titleLower.includes('لجنة الحكام') || 
+                contentLower.includes('حكام') || titleLower.includes('judge')) {
+                relevantArticles.push(article);
+            }
+        }
+    });
+    
+    // Always include first 5 articles if no specific matches
+    if (relevantArticles.length === 0) {
+        return articles.slice(0, 5);
+    }
+    
+    // Limit to prevent large payload
+    return relevantArticles.slice(0, 10);
+}
+
+/**
  * Create streaming chat payload - optimized for Vercel's longer timeout
  */
 function createStreamingChatPayload(query, language, documents) {
     const isArabic = language === 'ar';
     
-    // Simplified prompt optimized for MSA (Modern Standard Arabic)
+    // Smart filtering: Find relevant articles first, then send complete authentic texts
+    const relevantArticles = findRelevantArticles(query, documents.articles, isArabic);
+    const relevantDocs = {
+        ...documents,
+        articles: relevantArticles,
+        appendices: documents.appendices || []
+    };
+    
     const systemPrompt = isArabic 
-        ? `أجب بالعربية الفصحى فقط. ابحث في قوانين ITPF:
+        ? `أجب بالعربية الفصحى فقط. ابحث في النصوص القانونية الأصيلة التالية:
 
-${JSON.stringify(documents, null, 0)}`
-        : `Respond in English only. Search ITPF rules:
+${JSON.stringify(relevantDocs, null, 0)}`
+        : `Respond in English only. Search authentic legal texts:
 
-${JSON.stringify(documents, null, 0)}`;
+${JSON.stringify(relevantDocs, null, 0)}`;
 
     const userPrompt = isArabic 
         ? `سؤال: ${query}
@@ -422,7 +486,7 @@ JSON only:
             { role: "user", content: userPrompt }
         ],
         temperature: 0.3, // Lower temperature for more consistent results
-        max_tokens: isArabic ? 1000 : 1200,
+        max_tokens: isArabic ? 500 : 600,
         stream: false, // Disable streaming for reliability
         response_format: { type: "json_object" }
     };
@@ -546,11 +610,11 @@ function streamDeepSeekAPI(payload, language) {
             });
         });
 
-        // Shorter timeout for non-streaming - 60 seconds
-        req.setTimeout(60000, () => {
+        // Extended timeout for complete text processing - 90 seconds
+        req.setTimeout(90000, () => {
             req.destroy();
             reject({
-                error: 'Request timeout after 60 seconds',
+                error: 'Request timeout after 90 seconds',
                 message: language === 'ar' 
                     ? 'انتهت مهلة الطلب'
                     : 'Request timeout'
