@@ -12,8 +12,11 @@
 class ITTPFLegalSearch {
     constructor() {
         this.currentLanguage = 'en';
+        this.currentMode = 'search';  // 'search' or 'answer'
         this.isSearching = false;
+        this.cacheVersion = '12.1'; // Phase 3: Complete Appendices Integration + Enhanced Search
         this.searchCache = new Map();
+        this.answerCache = new Map();
         
         // DOM Elements
         this.elements = {
@@ -22,6 +25,14 @@ class ITTPFLegalSearch {
             searchQuery: document.getElementById('searchQuery'),
             searchButton: document.getElementById('searchButton'),
             charCount: document.getElementById('charCount'),
+            
+            // Mode toggle elements
+            searchMode: document.getElementById('searchMode'),
+            answerMode: document.getElementById('answerMode'),
+            searchLabel: document.getElementById('searchLabel'),
+            submitIcon: document.getElementById('submitIcon'),
+            submitText: document.getElementById('submitText'),
+            loadingText: document.getElementById('loadingText'),
             
             // Results elements
             resultsSection: document.getElementById('resultsSection'),
@@ -55,6 +66,15 @@ class ITTPFLegalSearch {
             if (e.target.dataset.lang) {
                 this.switchLanguage(e.target.dataset.lang);
             }
+        });
+        
+        // Mode toggle
+        this.elements.searchMode.addEventListener('click', () => {
+            this.switchMode('search');
+        });
+        
+        this.elements.answerMode.addEventListener('click', () => {
+            this.switchMode('answer');
         });
         
         // Search form
@@ -112,8 +132,9 @@ class ITTPFLegalSearch {
             option.classList.toggle('active', option.dataset.lang === language);
         });
         
-        // Update placeholder
-        this.updateSearchPlaceholder();
+        // Update placeholders and submit button
+        this.updatePlaceholders();
+        this.updateSubmitButton();
         
         // Save preference
         localStorage.setItem('itpf-language', language);
@@ -126,19 +147,86 @@ class ITTPFLegalSearch {
      */
     updateLanguageDisplay() {
         const savedLanguage = localStorage.getItem('itpf-language') || 'en';
+        const savedMode = localStorage.getItem('itpf-mode') || 'search';
         this.switchLanguage(savedLanguage);
+        this.switchMode(savedMode);
+    }
+    
+    /**
+     * Switch between search and answer modes
+     * @param {string} mode - Mode ('search' or 'answer')
+     */
+    switchMode(mode) {
+        if (mode === this.currentMode) return;
+        
+        this.currentMode = mode;
+        
+        // Update mode buttons
+        this.elements.searchMode.classList.toggle('active', mode === 'search');
+        this.elements.answerMode.classList.toggle('active', mode === 'answer');
+        
+        // Update placeholders and UI elements
+        this.updatePlaceholders();
+        this.updateSubmitButton();
+        
+        // Save preference
+        localStorage.setItem('itpf-mode', mode);
+        
+        console.log(`🔄 Mode switched to: ${mode}`);
+    }
+    
+    /**
+     * Update placeholders based on current mode and language
+     */
+    updatePlaceholders() {
+        // Hide all placeholders first
+        const placeholders = this.elements.searchLabel.querySelectorAll('span');
+        placeholders.forEach(span => span.style.display = 'none');
+        
+        // Show appropriate placeholders
+        if (this.currentMode === 'search') {
+            const searchPlaceholders = this.elements.searchLabel.querySelectorAll('.search-placeholder');
+            searchPlaceholders.forEach(span => {
+                if (span.getAttribute('data-lang-text').includes(this.currentLanguage)) {
+                    span.style.display = 'inline';
+                }
+            });
+        } else {
+            const questionPlaceholders = this.elements.searchLabel.querySelectorAll('.question-placeholder');
+            questionPlaceholders.forEach(span => {
+                if (span.getAttribute('data-lang-text').includes(this.currentLanguage)) {
+                    span.style.display = 'inline';
+                }
+            });
+        }
+    }
+    
+    /**
+     * Update submit button based on current mode
+     */
+    updateSubmitButton() {
+        // Update icon
+        this.elements.submitIcon.textContent = this.currentMode === 'search' ? '🔍' : '💬';
+        
+        // Hide all button texts first
+        const buttonTexts = this.elements.submitText.querySelectorAll('span');
+        buttonTexts.forEach(span => span.style.display = 'none');
+        
+        // Show appropriate button text
+        const textClass = this.currentMode === 'search' ? '.search-btn-text' : '.ask-btn-text';
+        const targetTexts = this.elements.submitText.querySelectorAll(textClass);
+        targetTexts.forEach(span => {
+            if (span.getAttribute('data-lang-text').includes(this.currentLanguage)) {
+                span.style.display = 'inline';
+            }
+        });
     }
     
     /**
      * Update search input placeholder based on current language
      */
     updateSearchPlaceholder() {
-        const placeholders = {
-            en: 'Enter your legal question here...',
-            ar: 'أدخل سؤالك القانوني هنا...'
-        };
-        
-        this.elements.searchQuery.placeholder = placeholders[this.currentLanguage];
+        this.updatePlaceholders();
     }
     
     /**
@@ -187,10 +275,15 @@ class ITTPFLegalSearch {
         }
         
         // Check cache first
-        const cacheKey = `${query}-${this.currentLanguage}`;
-        if (this.searchCache.has(cacheKey)) {
+        const cache = this.currentMode === 'search' ? this.searchCache : this.answerCache;
+        const cacheKey = `${query}-${this.currentLanguage}-${this.currentMode}-${this.cacheVersion}`;
+        if (cache.has(cacheKey)) {
             console.log('📋 Using cached results');
-            this.displayResults(this.searchCache.get(cacheKey));
+            if (this.currentMode === 'search') {
+                this.displayResults(cache.get(cacheKey));
+            } else {
+                this.displayAnswer(cache.get(cacheKey));
+            }
             return;
         }
         
@@ -206,15 +299,19 @@ class ITTPFLegalSearch {
         this.showLoadingState();
         
         try {
-            const response = await fetch('/api/search', {
+            const endpoint = this.currentMode === 'search' ? '/api/search' : '/api/answer';
+            const apiUrl = `https://itpf-legal-search-c06wc8tdx-mohammadqaaqahs-projects.vercel.app${endpoint}`;
+            
+            const requestBody = this.currentMode === 'search' 
+                ? { query: query, language: this.currentLanguage }
+                : { question: query, language: this.currentLanguage };
+            
+            const response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    query: query,
-                    language: this.currentLanguage
-                })
+                body: JSON.stringify(requestBody)
             });
             
             const data = await response.json();
@@ -228,16 +325,21 @@ class ITTPFLegalSearch {
             }
             
             // Cache successful results
-            const cacheKey = `${query}-${this.currentLanguage}`;
-            this.searchCache.set(cacheKey, data);
+            const cache = this.currentMode === 'search' ? this.searchCache : this.answerCache;
+            const cacheKey = `${query}-${this.currentLanguage}-${this.currentMode}-${this.cacheVersion}`;
+            cache.set(cacheKey, data);
             
             // Limit cache size
-            if (this.searchCache.size > 50) {
-                const firstKey = this.searchCache.keys().next().value;
-                this.searchCache.delete(firstKey);
+            if (cache.size > 50) {
+                const firstKey = cache.keys().next().value;
+                cache.delete(firstKey);
             }
             
-            this.displayResults(data);
+            if (this.currentMode === 'search') {
+                this.displayResults(data);
+            } else {
+                this.displayAnswer(data);
+            }
             
         } catch (error) {
             console.error('🔴 Search error:', error);
@@ -270,6 +372,19 @@ class ITTPFLegalSearch {
     showLoadingState() {
         this.hideAllStates();
         this.elements.loadingState.classList.add('active');
+        
+        // Update loading text based on mode
+        const loadingTexts = this.elements.loadingText.querySelectorAll('span');
+        loadingTexts.forEach(span => span.style.display = 'none');
+        
+        const loadingClass = this.currentMode === 'search' ? '.loading-search' : '.loading-answer';
+        const targetTexts = this.elements.loadingText.querySelectorAll(loadingClass);
+        targetTexts.forEach(span => {
+            if (span.getAttribute('data-lang-text').includes(this.currentLanguage)) {
+                span.style.display = 'inline';
+            }
+        });
+        
         this.elements.resultsSection.scrollIntoView({ behavior: 'smooth' });
     }
     
@@ -286,6 +401,23 @@ class ITTPFLegalSearch {
         }
         
         this.renderResults(data);
+        this.elements.resultsContainer.classList.add('active', 'fade-in');
+        this.elements.resultsSection.scrollIntoView({ behavior: 'smooth' });
+    }
+    
+    /**
+     * Display Q&A answer
+     * @param {Object} data - Answer data
+     */
+    displayAnswer(data) {
+        this.hideAllStates();
+        
+        if (!data.success) {
+            this.showError(data.message);
+            return;
+        }
+        
+        this.renderAnswer(data);
         this.elements.resultsContainer.classList.add('active', 'fade-in');
         this.elements.resultsSection.scrollIntoView({ behavior: 'smooth' });
     }
@@ -312,6 +444,45 @@ class ITTPFLegalSearch {
         `;
         
         this.elements.resultsContainer.innerHTML = resultsHTML;
+    }
+    
+    /**
+     * Render Q&A answer HTML
+     * @param {Object} data - Answer data
+     */
+    renderAnswer(data) {
+        const answerHTML = `
+            <div class="answer-header slide-up">
+                <h3 class="answer-title">
+                    ${this.currentLanguage === 'ar' ? 'الإجابة:' : 'Answer:'}
+                </h3>
+                <div class="answer-meta">
+                    ${this.currentLanguage === 'ar' 
+                        ? `مستوى الثقة: ${data.metadata.answer_confidence || 'متوسط'}`
+                        : `Confidence: ${data.metadata.answer_confidence || 'medium'}`
+                    }
+                </div>
+            </div>
+            
+            <div class="answer-content slide-up">
+                <div class="answer-text">
+                    ${this.formatAnswerContent(data.answer)}
+                </div>
+            </div>
+            
+            ${data.supporting_articles && data.supporting_articles.length > 0 ? `
+            <div class="supporting-articles slide-up">
+                <h4 class="supporting-title">
+                    ${this.currentLanguage === 'ar' ? 'المواد الداعمة:' : 'Supporting Articles:'}
+                </h4>
+                <div class="supporting-list">
+                    ${data.supporting_articles.map((article, index) => this.renderSupportingArticle(article, index)).join('')}
+                </div>
+            </div>
+            ` : ''}
+        `;
+        
+        this.elements.resultsContainer.innerHTML = answerHTML;
     }
     
     /**
@@ -425,6 +596,122 @@ class ITTPFLegalSearch {
     }
     
     /**
+     * Format answer content
+     * @param {string} content - Answer content
+     * @returns {string} Formatted content
+     */
+    formatAnswerContent(content) {
+        let formattedContent = this.escapeHtml(content);
+        
+        // Handle related articles section
+        if (formattedContent.includes('--- المواد القانونية ذات الصلة ---') || 
+            formattedContent.includes('--- Related Legal Articles ---')) {
+            
+            const parts = formattedContent.split(/--- (?:المواد القانونية ذات الصلة|Related Legal Articles) ---/);
+            const mainContent = parts[0];
+            const relatedContent = parts[1];
+            
+            // Format main content
+            let formattedMain = this.formatParagraphs(mainContent);
+            
+            // Format related articles if they exist
+            if (relatedContent) {
+                const sectionTitle = formattedContent.includes('--- المواد القانونية ذات الصلة ---') 
+                    ? 'المواد القانونية ذات الصلة' 
+                    : 'Related Legal Articles';
+                
+                formattedMain += `
+                    <div class="related-articles-section">
+                        <h4 class="related-articles-title">${sectionTitle}</h4>
+                        <div class="related-articles-content">
+                            ${this.formatRelatedArticles(relatedContent)}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            return formattedMain;
+        }
+        
+        // Format regular content
+        return this.formatParagraphs(formattedContent);
+    }
+    
+    /**
+     * Format paragraphs from content
+     * @param {string} content - Content to format
+     * @returns {string} Formatted paragraphs
+     */
+    formatParagraphs(content) {
+        const paragraphs = content.split('\n\n');
+        return paragraphs.map(p => {
+            const trimmed = p.trim();
+            if (trimmed) {
+                // Handle single line breaks within paragraphs
+                const formatted = trimmed.replace(/\n/g, '<br>');
+                return `<p>${formatted}</p>`;
+            }
+            return '';
+        }).join('');
+    }
+    
+    /**
+     * Format related articles section
+     * @param {string} content - Related articles content
+     * @returns {string} Formatted related articles
+     */
+    formatRelatedArticles(content) {
+        const articles = content.split(/\n(?=\d+\.)/);
+        
+        return articles.map(article => {
+            const trimmed = article.trim();
+            if (!trimmed) return '';
+            
+            // Split article number and title from content
+            const lines = trimmed.split('\n');
+            const titleLine = lines[0]; // "2. المادة 126: عنوان المادة"
+            const articleContent = lines.slice(1).join('\n');
+            
+            if (titleLine && articleContent) {
+                return `
+                    <div class="related-article-item">
+                        <h5 class="related-article-title">${titleLine}</h5>
+                        <div class="related-article-text">
+                            ${this.formatParagraphs(articleContent)}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            return `<div class="related-article-item">${this.formatParagraphs(trimmed)}</div>`;
+        }).join('');
+    }
+    
+    /**
+     * Render supporting article
+     * @param {Object} article - Supporting article
+     * @param {number} index - Article index
+     * @returns {string} HTML string
+     */
+    renderSupportingArticle(article, index) {
+        return `
+            <div class="supporting-article">
+                <div class="supporting-header">
+                    <h5 class="supporting-article-title">${this.escapeHtml(article.title)}</h5>
+                    <span class="supporting-score">${article.score}%</span>
+                </div>
+                <div class="supporting-content">
+                    <div class="supporting-text">${this.escapeHtml(article.content)}</div>
+                </div>
+                <div class="supporting-source">
+                    ${this.currentLanguage === 'ar' ? 'المصدر:' : 'Source:'} 
+                    ${this.escapeHtml(article.source.article)}
+                </div>
+            </div>
+        `;
+    }
+    
+    /**
      * Load cached data on page load
      */
     loadFromCache() {
@@ -432,9 +719,17 @@ class ITTPFLegalSearch {
         const oneHour = 60 * 60 * 1000;
         const now = Date.now();
         
+        // Clear search cache
         for (const [key, value] of this.searchCache.entries()) {
             if (value.timestamp && (now - value.timestamp) > oneHour) {
                 this.searchCache.delete(key);
+            }
+        }
+        
+        // Clear answer cache
+        for (const [key, value] of this.answerCache.entries()) {
+            if (value.timestamp && (now - value.timestamp) > oneHour) {
+                this.answerCache.delete(key);
             }
         }
     }
