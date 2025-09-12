@@ -322,6 +322,47 @@ class ExpertLegalAnalyzer:
         
         return score
 
+    def generate_response(self, question: str, results: List[Dict[str, Any]], language: str = 'arabic') -> str:
+        """دالة إنتاج الإجابة الذكية مع تكامل DeepSeek AI الحقيقي"""
+        
+        print(f"🔍 generate_response called with question: {question[:50]}...")
+        print(f"🌍 Language: {language}")
+        print(f"📊 Results found: {len(results)}")
+        
+        # ALWAYS TRY DEEPSEEK AI FIRST - REAL INTELLIGENCE
+        deepseek_success = False
+        expert_analysis = None
+        
+        try:
+            from deepseek_integration import deepseek_integration
+            expert_analysis = deepseek_integration.generate_intelligent_legal_response(
+                question=question, 
+                legal_context=results,
+                language=language
+            )
+            
+            # Check if DeepSeek actually provided a valid response
+            if (expert_analysis and 
+                not expert_analysis.startswith("AI analysis unavailable") and 
+                not expert_analysis.startswith("AI system error") and
+                len(expert_analysis.strip()) > 20):  # Ensure substantial response
+                print("🧠 SUCCESS: Using DeepSeek AI for intelligent response")
+                deepseek_success = True
+            else:
+                print(f"⚠️ DeepSeek returned insufficient response: {expert_analysis[:100] if expert_analysis else 'None'}...")
+                deepseek_success = False
+                
+        except Exception as deepseek_error:
+            print(f"⚠️ DeepSeek exception: {deepseek_error}")
+            deepseek_success = False
+        
+        # Use fallback only if DeepSeek completely failed
+        if not deepseek_success:
+            print("🎯 Using fallback response generation")
+            expert_analysis = create_expert_legal_analysis(question, results, language)
+            
+        return expert_analysis
+
 
 def create_expert_legal_analysis(question: str, results: List[Dict[str, Any]], language: str = 'arabic') -> str:
     """تحليل قانوني خبير متقدم مع فهم عميق للنصوص"""
@@ -3473,14 +3514,41 @@ class handler(BaseHTTPRequestHandler):
                                         'إجراءات', 'اراد الفريق', 'ماهي الاجراءات', 'minimum', 'maximum', 'length', 'size', 
                                         'cm', 'meter', 'specifications', 'a)', 'b)', 'c)']
                     
-                    if (ADVANCED_REASONING_AVAILABLE and 
-                        any(keyword in question.lower() for keyword in enhanced_keywords) and
-                        len(all_results) >= 1):
-                        expert_analysis = format_enhanced_legal_response(question, all_results, intent_analysis, language)
-                        print("🎯 Using enhanced general response formatting")
-                    else:
-                        expert_analysis = create_expert_legal_analysis(question, all_results, language)
-                        print("🎯 Using standard response formatting")
+                    # TRY DEEPSEEK AI FIRST - REAL INTELLIGENCE
+                    expert_analysis = None
+                    deepseek_success = False
+                    
+                    try:
+                        from deepseek_integration import deepseek_integration
+                        expert_analysis = deepseek_integration.generate_intelligent_legal_response(
+                            question=question, 
+                            legal_context=all_results,
+                            language=language
+                        )
+                        
+                        # Check if DeepSeek actually provided a valid response
+                        if expert_analysis and not expert_analysis.startswith("AI analysis unavailable") and not expert_analysis.startswith("AI system error"):
+                            print("🧠 Using DeepSeek AI for intelligent response")
+                            deepseek_success = True
+                        else:
+                            print(f"⚠️ DeepSeek returned error response: {expert_analysis[:100]}...")
+                            deepseek_success = False
+                        
+                    except Exception as deepseek_error:
+                        print(f"⚠️ DeepSeek exception: {deepseek_error}")
+                        deepseek_success = False
+                    
+                    # Use fallback only if DeepSeek completely failed
+                    if not deepseek_success:
+                        print("🎯 Using fallback response generation")
+                        if (ADVANCED_REASONING_AVAILABLE and 
+                            any(keyword in question.lower() for keyword in enhanced_keywords) and
+                            len(all_results) >= 1):
+                            expert_analysis = format_enhanced_legal_response(question, all_results, intent_analysis, language)
+                            print("🎯 Using enhanced fallback formatting")
+                        else:
+                            expert_analysis = create_expert_legal_analysis(question, all_results, language)
+                            print("🎯 Using basic fallback formatting")
             except Exception as e:
                 print(f"⚠️ Specialized formatting failed, using standard: {str(e)}")
                 expert_analysis = create_expert_legal_analysis(question, all_results, language)

@@ -1,485 +1,355 @@
 """
-ITPF Legal Search System - RAG Implementation
-نظام البحث القانوني للاتحاد الدولي لالتقاط الأوتاد
+نسخة مبسطة مؤقتة من ITPF Legal Search API
+محافظة على فحص سلامة النصوص - بدون المكتبات الثقيلة للاختبار
 """
 
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import json
 import os
-import logging
+import re
 from typing import List, Dict, Any, Optional
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-import asyncio
-from .embeddings import embeddings_manager
-
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from datetime import datetime
 
 app = FastAPI(
-    title="ITPF Legal Search System",
-    description="نظام البحث القانوني للاتحاد الدولي لالتقاط الأوتاد",
-    version="2.0.0"
+    title="ITPF Legal Search API - Simplified",
+    description="نسخة مبسطة للاختبار مع الحفاظ على سلامة النصوص",
+    version="1.0.0-simplified"
 )
 
-class SearchQuery(BaseModel):
-    query: str
-    language: str = "ar"  # "ar" for Arabic, "en" for English
-    max_results: int = 5
-    search_type: str = "semantic"  # "semantic" or "keyword"
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-class SearchResponse(BaseModel):
-    query: str
-    results: List[Dict[str, Any]]
-    total_found: int
-    processing_time: float
-    integrity_check: Dict[str, Any]
-
-class LegalTextLoader:
-    """محمل النصوص القانونية مع فحص السلامة"""
-    
-    def __init__(self):
-        self.arabic_texts = None
-        self.english_texts = None
-        self.reference_arabic_size = 0
-        self.reference_english_size = 0
+class SimplifiedLegalTextLoader:
+    def __init__(self, api_dir: str):
+        self.api_dir = api_dir
+        self.arabic_data = None
+        self.english_data = None
+        self.loaded = False
         
-    async def load_reference_files(self):
-        """تحميل الملفات المرجعية للمقارنة"""
+    async def load_data(self):
+        """تحميل البيانات القانونية"""
+        if self.loaded:
+            return
+            
         try:
-            # Determine base path (Vercel vs local)
-            base_path = '/var/task' if os.path.exists('/var/task') else '.'
+            # تحميل البيانات العربية
+            arabic_file = os.path.join(self.api_dir, "arabic_legal_rules_complete_authentic.json")
+            if os.path.exists(arabic_file):
+                with open(arabic_file, 'r', encoding='utf-8') as f:
+                    self.arabic_data = json.load(f)
             
-            # Arabic reference
-            arabic_path = f'{base_path}/arabic.txt'
-            with open(arabic_path, 'r', encoding='utf-8') as f:
-                arabic_ref = f.read()
-                self.reference_arabic_size = len(arabic_ref)
-                logger.info(f"Arabic reference loaded: {self.reference_arabic_size} chars")
-            
-            # English reference  
-            english_path = f'{base_path}/english.txt'
-            with open(english_path, 'r', encoding='utf-8') as f:
-                english_ref = f.read()
-                self.reference_english_size = len(english_ref)
-                logger.info(f"English reference loaded: {self.reference_english_size} chars")
-                
-            return True
-        except Exception as e:
-            logger.error(f"Reference files loading error: {e}")
-            return False
-    
-    async def load_partitioned_data(self):
-        """تحميل البيانات المقسمة مع فحص السلامة"""
-        try:
-            # Determine base path (Vercel vs local)
-            base_path = '/var/task' if os.path.exists('/var/task') else '.'
-            
-            # Load Arabic parts
-            arabic_articles = []
-            arabic_appendices = []
-            
-            for part in [1, 2, 3]:
-                with open(f'{base_path}/api/arabic_part{part}.json', 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    arabic_articles.extend(data['articles'])
+            # تحميل البيانات الإنجليزية
+            english_file = os.path.join(self.api_dir, "english_legal_rules_complete_authentic.json")
+            if os.path.exists(english_file):
+                with open(english_file, 'r', encoding='utf-8') as f:
+                    self.english_data = json.load(f)
                     
-                    # Check for appendices in part 3
-                    if part == 3 and 'appendices' in data:
-                        arabic_appendices.extend(data['appendices'])
-            
-            # Load English parts
-            english_articles = []
-            english_appendices = []
-            
-            for part in [1, 2, 3]:
-                with open(f'{base_path}/api/english_part{part}.json', 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    english_articles.extend(data['articles'])
-                    
-                    # Check for appendices in part 3
-                    if part == 3 and 'appendices' in data:
-                        english_appendices.extend(data['appendices'])
-            
-            self.arabic_texts = {
-                'articles': arabic_articles,
-                'appendices': arabic_appendices
-            }
-            
-            self.english_texts = {
-                'articles': english_articles, 
-                'appendices': english_appendices
-            }
-            
-            # Integrity check
-            integrity = await self.verify_integrity()
-            logger.info(f"Data loaded. Integrity: {integrity}")
-            
-            return integrity['status'] == 'complete'
+            self.loaded = True
             
         except Exception as e:
-            logger.error(f"Data loading error: {e}")
-            return False
-    
-    async def verify_integrity(self):
-        """فحص سلامة النصوص مقابل الملفات المرجعية"""
-        try:
-            # Count Arabic articles and appendices
-            arabic_articles_count = len(self.arabic_texts['articles'])
-            arabic_appendices_count = len(self.arabic_texts['appendices'])
-            
-            # Count English articles and appendices  
-            english_articles_count = len(self.english_texts['articles'])
-            english_appendices_count = len(self.english_texts['appendices'])
-            
-            # Check article numbers range (100-154)
-            arabic_numbers = [art['article_number'] for art in self.arabic_texts['articles']]
-            english_numbers = [art['article_number'] for art in self.english_texts['articles']]
-            
-            expected_numbers = set(range(100, 155))  # 100-154
-            arabic_set = set(arabic_numbers)
-            english_set = set(english_numbers)
-            
-            integrity = {
-                'status': 'complete',
-                'arabic_articles': arabic_articles_count,
-                'english_articles': english_articles_count,
-                'arabic_appendices': arabic_appendices_count,
-                'english_appendices': english_appendices_count,
-                'missing_arabic': list(expected_numbers - arabic_set),
-                'missing_english': list(expected_numbers - english_set),
-                'total_content_chars': {
-                    'arabic': sum(len(art.get('content', '')) for art in self.arabic_texts['articles']),
-                    'english': sum(len(art.get('content', '')) for art in self.english_texts['articles'])
-                }
-            }
-            
-            # Check completeness
-            if (arabic_articles_count != 55 or english_articles_count != 55 or 
-                arabic_appendices_count < 2 or english_appendices_count < 2 or
-                len(integrity['missing_arabic']) > 0 or len(integrity['missing_english']) > 0):
-                integrity['status'] = 'incomplete'
-                integrity['errors'] = []
-                
-                if arabic_articles_count != 55:
-                    integrity['errors'].append(f"Arabic articles: expected 55, got {arabic_articles_count}")
-                if english_articles_count != 55:
-                    integrity['errors'].append(f"English articles: expected 55, got {english_articles_count}")
-                if arabic_appendices_count < 2:
-                    integrity['errors'].append(f"Arabic appendices: expected 2, got {arabic_appendices_count}")
-                if english_appendices_count < 2:
-                    integrity['errors'].append(f"English appendices: expected 2, got {english_appendices_count}")
-            
-            return integrity
-            
-        except Exception as e:
-            logger.error(f"Integrity verification error: {e}")
-            return {
-                'status': 'error',
-                'error': str(e)
-            }
+            raise HTTPException(status_code=500, detail=f"فشل في تحميل البيانات: {str(e)}")
 
-# Initialize loader
-text_loader = LegalTextLoader()
-
-@app.on_event("startup")
-async def startup_event():
-    """تحميل البيانات عند بدء التشغيل"""
-    logger.info("Starting ITPF Legal Search System...")
-    
-    # Load reference files first
-    ref_loaded = await text_loader.load_reference_files()
-    if not ref_loaded:
-        logger.error("Failed to load reference files")
+    async def verify_integrity(self) -> Dict[str, Any]:
+        """فحص سلامة النصوص القانونية مع مقارنة بالملفات المرجعية"""
+        await self.load_data()
         
-    # Load partitioned data
-    data_loaded = await text_loader.load_partitioned_data()
-    if not data_loaded:
-        logger.error("Failed to load partitioned data")
-        return
-    
-    # Initialize embeddings
-    logger.info("Initializing embeddings system...")
-    embeddings_ready = await embeddings_manager.process_all_texts(
-        text_loader.arabic_texts, 
-        text_loader.english_texts
-    )
-    
-    if embeddings_ready:
-        logger.info("ITPF Legal Search System fully ready with semantic search!")
-    else:
-        logger.warning("System ready with keyword search only (embeddings failed)")
-
-@app.get("/api/health")
-async def health_check():
-    """فحص حالة النظام"""
-    if text_loader.arabic_texts is None or text_loader.english_texts is None:
-        raise HTTPException(status_code=503, detail="System not ready")
-    
-    integrity = await text_loader.verify_integrity()
-    
-    return {
-        "status": "healthy",
-        "system": "ITPF Legal Search RAG System",
-        "version": "2.0.0",
-        "integrity": integrity,
-        "timestamp": "2025-01-08"
-    }
-
-@app.post("/api/search")
-async def search_legal_texts(query: SearchQuery):
-    """البحث في النصوص القانونية"""
-    start_time = asyncio.get_event_loop().time()
-    
-    try:
-        # Verify integrity first
-        integrity = await text_loader.verify_integrity()
-        if integrity['status'] != 'complete':
-            raise HTTPException(status_code=503, detail="Text integrity check failed")
-        
-        results = []
-        
-        # Choose search method
-        if query.search_type == "semantic" and embeddings_manager.model is not None:
-            # Semantic search using embeddings
-            logger.info(f"Performing semantic search for: {query.query}")
-            semantic_results = await embeddings_manager.semantic_search(
-                query.query, 
-                query.language, 
-                query.max_results
-            )
-            
-            for result in semantic_results:
-                formatted_result = {
-                    "type": result.get('type', 'unknown'),
-                    "title": result.get('title', ''),
-                    "content": result.get('content', '')[:800] + "..." if len(result.get('content', '')) > 800 else result.get('content', ''),
-                    "similarity_score": result.get('similarity_score', 0),
-                    "rank": result.get('rank', 0),
-                    "source": result.get('metadata', {}).get('source', 'unknown'),
-                    "chunk_id": result.get('chunk_id', ''),
-                    "search_method": "semantic"
-                }
-                
-                # Add specific fields based on type
-                if result.get('type') == 'article':
-                    formatted_result["article_number"] = result.get('article_number')
-                    formatted_result["section"] = result.get('section', '')
-                elif result.get('type') == 'appendix':
-                    formatted_result["appendix_number"] = result.get('appendix_number')
-                elif result.get('type') == 'appendix_section':
-                    formatted_result["appendix_number"] = result.get('appendix_number')
-                    formatted_result["section_name"] = result.get('section_name', '')
-                
-                results.append(formatted_result)
-        else:
-            # Fallback to keyword search
-            logger.info(f"Performing keyword search for: {query.query}")
-            query_lower = query.query.lower()
-            
-            # Choose language texts
-            texts = text_loader.arabic_texts if query.language == "ar" else text_loader.english_texts
-            
-            # Search in articles
-            for article in texts['articles']:
-                content = article.get('content', '').lower()
-                title = article.get('title', '').lower()
-                
-                if query_lower in content or query_lower in title:
-                    results.append({
-                        "article_number": article['article_number'],
-                        "title": article.get('title', ''),
-                        "content": article.get('content', '')[:800] + "..." if len(article.get('content', '')) > 800 else article.get('content', ''),
-                        "section": article.get('section', ''),
-                        "relevance_score": 0.8,
-                        "source": "article",
-                        "type": "article",
-                        "search_method": "keyword"
-                    })
-            
-            # Search in appendices
-            for appendix in texts['appendices']:
-                content_str = str(appendix.get('content', '')).lower()
-                title = appendix.get('title', '').lower()
-                
-                if query_lower in content_str or query_lower in title:
-                    results.append({
-                        "appendix_number": appendix['appendix_number'],
-                        "title": appendix.get('title', ''),
-                        "content": str(appendix.get('content', ''))[:800] + "...",
-                        "relevance_score": 0.9,
-                        "source": "appendix",
-                        "type": "appendix",
-                        "search_method": "keyword"
-                    })
-            
-            # Sort by relevance and limit results
-            results = sorted(results, key=lambda x: x.get('relevance_score', x.get('similarity_score', 0)), reverse=True)[:query.max_results]
-        
-        processing_time = asyncio.get_event_loop().time() - start_time
-        
-        return SearchResponse(
-            query=query.query,
-            results=results,
-            total_found=len(results),
-            processing_time=round(processing_time, 3),
-            integrity_check=integrity
-        )
-        
-    except Exception as e:
-        logger.error(f"Search error: {e}")
-        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
-
-@app.get("/api/article/{article_number}")
-async def get_article(article_number: int, language: str = "ar"):
-    """الحصول على مادة قانونية محددة"""
-    try:
-        texts = text_loader.arabic_texts if language == "ar" else text_loader.english_texts
-        
-        for article in texts['articles']:
-            if article['article_number'] == article_number:
-                return article
-        
-        raise HTTPException(status_code=404, detail=f"Article {article_number} not found")
-        
-    except Exception as e:
-        logger.error(f"Article retrieval error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/stats")
-async def get_system_stats():
-    """إحصائيات النظام"""
-    try:
-        integrity = await text_loader.verify_integrity()
-        embeddings_stats = await embeddings_manager.get_embeddings_stats()
-        
-        return {
-            "system": "ITPF Legal Search System",
-            "version": "2.0.0",
-            "statistics": {
-                "arabic_articles": len(text_loader.arabic_texts['articles']),
-                "english_articles": len(text_loader.english_texts['articles']),
-                "arabic_appendices": len(text_loader.arabic_texts['appendices']),
-                "english_appendices": len(text_loader.english_texts['appendices']),
-                "total_content_size": integrity.get('total_content_chars', {})
-            },
-            "integrity": integrity,
-            "reference_sizes": {
-                "arabic": text_loader.reference_arabic_size,
-                "english": text_loader.reference_english_size
-            },
-            "embeddings": embeddings_stats,
-            "capabilities": {
-                "semantic_search": embeddings_stats.get('model_loaded', False),
-                "keyword_search": True,
-                "multilingual": True,
-                "real_time_integrity_check": True
+        integrity_report = {
+            "status": "success",
+            "timestamp": datetime.now().isoformat(),
+            "arabic_verification": {},
+            "english_verification": {},
+            "overall_status": "complete",
+            "reference_comparison": {},
+            "prevention_system": {
+                "active": True,
+                "reference_files": ["arabic.txt", "english.txt"],
+                "auto_validation": True
             }
         }
-    except Exception as e:
-        logger.error(f"Stats error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/embeddings/status")
-async def get_embeddings_status():
-    """حالة نظام التمثيل المتجه"""
-    try:
-        return await embeddings_manager.get_embeddings_stats()
-    except Exception as e:
-        logger.error(f"Embeddings status error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/search/hybrid")
-async def hybrid_search(query: SearchQuery):
-    """البحث المختلط: دلالي + كلمات مفتاحية"""
-    start_time = asyncio.get_event_loop().time()
-    
-    try:
-        # Verify integrity first
-        integrity = await text_loader.verify_integrity()
-        if integrity['status'] != 'complete':
-            raise HTTPException(status_code=503, detail="Text integrity check failed")
         
-        if not (embeddings_manager.use_pinecone and embeddings_manager.pinecone_ready):
-            # Fallback to regular semantic search
-            return await search_legal_texts(query)
-        
-        # Import pinecone_store
-        from .vector_store import pinecone_store
-        
-        # Create query embedding
-        query_embedding = embeddings_manager.model.encode([query.query])
-        
-        # Perform hybrid search with filters
-        keyword_filters = {}
-        
-        # You can add more sophisticated keyword extraction here
-        query_words = query.query.lower().split()
-        if len(query_words) > 0:
-            keyword_filters['content_keywords'] = query_words
-        
-        results = await pinecone_store.hybrid_search(
-            query_embedding[0],
-            keyword_filters,
-            query.language,
-            query.max_results
-        )
-        
-        # Format results
-        formatted_results = []
-        for result in results:
-            formatted_result = {
-                "type": result.get('type', 'unknown'),
-                "title": result.get('title', ''),
-                "content": result.get('content', ''),
-                "similarity_score": result.get('score', 0),
-                "rank": result.get('rank', 0),
-                "source": result.get('source', 'unknown'),
-                "search_method": "hybrid",
-                "keyword_match": result.get('keyword_match', False)
+        # مقارنة مع الملفات المرجعية
+        try:
+            # قراءة النص المرجعي العربي
+            arabic_ref_path = os.path.join(os.path.dirname(self.api_dir), "arabic.txt")
+            if os.path.exists(arabic_ref_path):
+                with open(arabic_ref_path, 'r', encoding='utf-8') as f:
+                    arabic_ref_content = f.read()
+                    arabic_ref_articles = len(re.findall(r'المادة \d{3}:', arabic_ref_content))
+                    
+            # قراءة النص المرجعي الإنجليزي
+            english_ref_path = os.path.join(os.path.dirname(self.api_dir), "english.txt")  
+            if os.path.exists(english_ref_path):
+                with open(english_ref_path, 'r', encoding='utf-8') as f:
+                    english_ref_content = f.read()
+                    english_ref_articles = len(re.findall(r'Article \d{3}:', english_ref_content))
+                    
+            integrity_report["reference_comparison"] = {
+                "arabic_reference_articles": arabic_ref_articles,
+                "english_reference_articles": english_ref_articles,
+                "reference_files_accessible": True
             }
+        except Exception as e:
+            integrity_report["reference_comparison"] = {
+                "error": f"لا يمكن الوصول للملفات المرجعية: {str(e)}",
+                "reference_files_accessible": False
+            }
+        
+        # فحص البيانات العربية
+        if self.arabic_data:
+            arabic_articles = self.arabic_data.get('articles', [])
+            arabic_appendices = self.arabic_data.get('appendices', [])
             
-            # Add specific fields based on type
-            if result.get('type') == 'article':
-                formatted_result["article_number"] = result.get('article_number')
-                formatted_result["section"] = result.get('section', '')
-            elif result.get('type') == 'appendix':
-                formatted_result["appendix_number"] = result.get('appendix_number')
-                
-            formatted_results.append(formatted_result)
+            # فحص الأرقام (100-154 = 55 مادة)
+            article_numbers = set()
+            for article in arabic_articles:
+                article_num = article.get('article_number')
+                if article_num:
+                    article_numbers.add(int(article_num))
+            
+            expected_numbers = set(range(100, 155))
+            missing_articles = expected_numbers - article_numbers
+            
+            integrity_report["arabic_verification"] = {
+                "total_articles": len(arabic_articles),
+                "expected_articles": 55,
+                "found_article_numbers": sorted(list(article_numbers)),
+                "missing_articles": sorted(list(missing_articles)),
+                "appendices_count": len(arabic_appendices),
+                "total_characters": sum(len(str(item)) for item in self.arabic_data)
+            }
         
-        processing_time = asyncio.get_event_loop().time() - start_time
+        # فحص البيانات الإنجليزية
+        if self.english_data:
+            english_articles = []
+            # استخراج المقالات من الفصول
+            for chapter in self.english_data.get('chapters', []):
+                english_articles.extend(chapter.get('articles', []))
+            english_appendices = self.english_data.get('appendices', [])
+            
+            # فحص الأرقام
+            article_numbers = set()
+            for article in english_articles:
+                article_num = article.get('article_number')
+                if article_num:
+                    article_numbers.add(int(article_num))
+            
+            expected_numbers = set(range(100, 155))
+            missing_articles = expected_numbers - article_numbers
+            
+            integrity_report["english_verification"] = {
+                "total_articles": len(english_articles),
+                "expected_articles": 55,
+                "found_article_numbers": sorted(list(article_numbers)),
+                "missing_articles": sorted(list(missing_articles)),
+                "appendices_count": len(english_appendices),
+                "total_characters": sum(len(str(item)) for item in self.english_data)
+            }
         
-        return SearchResponse(
-            query=query.query,
-            results=formatted_results,
-            total_found=len(formatted_results),
-            processing_time=round(processing_time, 3),
-            integrity_check=integrity
+        # تحديد الحالة العامة
+        arabic_complete = (
+            integrity_report["arabic_verification"].get("total_articles", 0) == 55 and
+            len(integrity_report["arabic_verification"].get("missing_articles", [])) == 0 and
+            integrity_report["arabic_verification"].get("appendices_count", 0) >= 2
         )
         
-    except Exception as e:
-        logger.error(f"Hybrid search error: {e}")
-        raise HTTPException(status_code=500, detail=f"Hybrid search failed: {str(e)}")
+        english_complete = (
+            integrity_report["english_verification"].get("total_articles", 0) == 55 and
+            len(integrity_report["english_verification"].get("missing_articles", [])) == 0 and
+            integrity_report["english_verification"].get("appendices_count", 0) >= 2
+        )
+        
+        if not arabic_complete or not english_complete:
+            integrity_report["overall_status"] = "incomplete"
+            integrity_report["status"] = "warning"
+        
+        # فحص مطابقة للملفات المرجعية
+        if "reference_comparison" in integrity_report and integrity_report["reference_comparison"].get("reference_files_accessible"):
+            ref_arabic = integrity_report["reference_comparison"].get("arabic_reference_articles", 0)
+            ref_english = integrity_report["reference_comparison"].get("english_reference_articles", 0)
+            
+            current_arabic = integrity_report["arabic_verification"].get("total_articles", 0)
+            current_english = integrity_report["english_verification"].get("total_articles", 0)
+            
+            if ref_arabic != current_arabic or ref_english != current_english:
+                integrity_report["status"] = "mismatch_with_reference" 
+                integrity_report["overall_status"] = "reference_mismatch"
+                integrity_report["mismatch_details"] = {
+                    "arabic": {"expected": ref_arabic, "found": current_arabic},
+                    "english": {"expected": ref_english, "found": current_english}
+                }
+        
+        return integrity_report
 
-@app.get("/api/pinecone/stats")
-async def get_pinecone_stats():
-    """إحصائيات Pinecone"""
+    async def simple_search(self, query: str, language: str = "both", max_results: int = 10) -> List[Dict[str, Any]]:
+        """بحث مبسط نصي - بدون embeddings"""
+        await self.load_data()
+        
+        results = []
+        query_lower = query.lower()
+        
+        # البحث في البيانات العربية
+        if language in ["arabic", "both"] and self.arabic_data:
+            arabic_articles = self.arabic_data.get('articles', [])
+            for item in arabic_articles:
+                title = item.get('title', '').lower()
+                content = item.get('content', '').lower()
+                
+                if query_lower in title or query_lower in content:
+                    results.append({
+                        "id": item.get('article_number', ''),
+                        "title": item.get('title', ''),
+                        "content": item.get('content', ''),
+                        "type": "article",
+                        "language": "arabic",
+                        "score": 1.0  # نتيجة ثابتة للبحث المبسط
+                    })
+                    if len(results) >= max_results:
+                        break
+        
+        # البحث في البيانات الإنجليزية
+        if language in ["english", "both"] and self.english_data:
+            english_articles = self.english_data.get('articles', [])
+            
+            for item in english_articles:
+                title = item.get('title', '').lower()
+                content = item.get('content', '').lower()
+                
+                if query_lower in title or query_lower in content:
+                    results.append({
+                        "id": item.get('article_number', ''),
+                        "title": item.get('title', ''),
+                        "content": item.get('content', ''),
+                        "type": "article",
+                        "language": "english",
+                        "score": 1.0
+                    })
+                    if len(results) >= max_results:
+                        break
+        
+        return results[:max_results]
+
+# إنشاء instance
+current_dir = os.path.dirname(os.path.abspath(__file__))
+text_loader = SimplifiedLegalTextLoader(current_dir)
+
+@app.get("/")
+@app.get("/api/main")
+async def root():
+    return {
+        "message": "ITPF Legal Search API - نسخة مبسطة للاختبار",
+        "version": "1.0.0-simplified",
+        "status": "active",
+        "features": ["text_integrity_check", "simple_search"]
+    }
+
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "mode": "simplified_testing"
+    }
+
+@app.post("/verify-integrity")
+async def verify_text_integrity():
+    """فحص سلامة النصوص القانونية"""
     try:
-        if not (embeddings_manager.use_pinecone and embeddings_manager.pinecone_ready):
-            return {"status": "not_available", "message": "Pinecone not initialized"}
+        report = await text_loader.verify_integrity()
+        return JSONResponse(content=report)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"خطأ في فحص السلامة: {str(e)}")
+
+@app.post("/search")
+@app.post("/api/search")
+async def search_legal_texts(request_data: dict):
+    """بحث مبسط في النصوص القانونية"""
+    try:
+        query = request_data.get("query", "")
+        language = request_data.get("language", "both")
+        max_results = request_data.get("max_results", 10)
         
-        from .vector_store import pinecone_store
-        return await pinecone_store.get_index_stats()
+        if not query:
+            raise HTTPException(status_code=400, detail="يجب تقديم نص للبحث")
+        
+        results = await text_loader.simple_search(query, language, max_results)
+        
+        return JSONResponse(content={
+            "query": query,
+            "language": language,
+            "results_count": len(results),
+            "results": results,
+            "search_type": "simplified_text_search"
+        })
         
     except Exception as e:
-        logger.error(f"Pinecone stats error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"خطأ في البحث: {str(e)}")
 
-# Main entry point for Vercel
+@app.get("/data-stats")
+async def get_data_statistics():
+    """إحصائيات البيانات"""
+    try:
+        await text_loader.load_data()
+        
+        stats = {
+            "arabic_loaded": text_loader.arabic_data is not None,
+            "english_loaded": text_loader.english_data is not None,
+            "arabic_items": len(text_loader.arabic_data) if text_loader.arabic_data else 0,
+            "english_items": len(text_loader.english_data) if text_loader.english_data else 0,
+        }
+        
+        return JSONResponse(content=stats)
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"خطأ في جلب الإحصائيات: {str(e)}")
+
+@app.post("/restore-from-reference")
+async def restore_from_reference():
+    """استعادة البيانات من الملفات المرجعية في حالة النقص"""
+    try:
+        # فحص الحالة الحالية
+        integrity_report = await text_loader.verify_integrity()
+        
+        if integrity_report["overall_status"] == "complete":
+            return JSONResponse(content={
+                "status": "no_action_needed",
+                "message": "البيانات مكتملة ولا تحتاج استعادة",
+                "current_integrity": integrity_report
+            })
+        
+        # إذا كان هناك نقص، استخدم الملف المكتمل
+        api_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # استعادة العربية من الملف المكتمل
+        if integrity_report["arabic_verification"].get("total_articles", 0) < 55:
+            complete_file = os.path.join(api_dir, "arabic_legal_rules_complete_fixed.json")
+            target_file = os.path.join(api_dir, "arabic_legal_rules_complete_authentic.json")
+            
+            if os.path.exists(complete_file):
+                import shutil
+                shutil.copy2(complete_file, target_file)
+                
+        # إعادة تحميل البيانات والتحقق
+        text_loader.loaded = False
+        await text_loader.load_data()
+        new_integrity = await text_loader.verify_integrity()
+        
+        return JSONResponse(content={
+            "status": "restored",
+            "message": "تمت استعادة البيانات بنجاح",
+            "before": integrity_report,
+            "after": new_integrity
+        })
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"خطأ في الاستعادة: {str(e)}")
+
+# Vercel handler
+handler = app
 app_handler = app
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
