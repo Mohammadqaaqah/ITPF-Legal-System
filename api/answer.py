@@ -334,8 +334,8 @@ class ExpertLegalAnalyzer:
         expert_analysis = None
         
         try:
-            from deepseek_integration import deepseek_integration
-            expert_analysis = deepseek_integration.generate_intelligent_legal_response(
+            from deepseek_simple import deepseek_simple
+            expert_analysis = deepseek_simple.generate_intelligent_legal_response(
                 question=question, 
                 legal_context=results,
                 language=language
@@ -3519,8 +3519,8 @@ class handler(BaseHTTPRequestHandler):
                     deepseek_success = False
                     
                     try:
-                        from deepseek_integration import deepseek_integration
-                        expert_analysis = deepseek_integration.generate_intelligent_legal_response(
+                        from deepseek_simple import deepseek_simple
+                        expert_analysis = deepseek_simple.generate_intelligent_legal_response(
                             question=question, 
                             legal_context=all_results,
                             language=language
