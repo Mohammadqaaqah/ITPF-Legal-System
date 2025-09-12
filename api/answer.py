@@ -49,18 +49,44 @@ class ITTPFLegalSystem:
             print(f"❌ خطأ في تحميل قواعد البيانات: {str(e)}")
     
     def _initialize_deepseek(self):
-        """تهيئة مفاتيح DeepSeek API"""
-        potential_keys = ['DEEPSEEK_API_KEY', 'DEEPSEEK_API_KEY_1', 'DEEPSEEK_API_KEY_2', 'DEEPSEEK_API_KEY_3']
+        """تهيئة مفاتيح DeepSeek API من بيئة Vercel"""
+        # قائمة بجميع المفاتيح المحتملة في بيئة Vercel
+        potential_keys = [
+            'DEEPSEEK_API_KEY',
+            'DEEPSEEK_API_KEY_1', 
+            'DEEPSEEK_API_KEY_2',
+            'DEEPSEEK_API_KEY_3',
+            'deepseek_api_key',
+            'DEEPSEEK_TOKEN',
+            'deepseek_token'
+        ]
         
+        print("🔍 البحث عن مفاتيح DeepSeek في بيئة Vercel...")
+        
+        # محاولة قراءة كل مفتاح من البيئة
         for key_name in potential_keys:
-            value = os.environ.get(key_name)
-            if value and len(value) > 20:
-                self.deepseek_api_key = value
-                print(f"🔑 DeepSeek API Key جاهز: {key_name}")
-                break
+            try:
+                value = os.environ.get(key_name, '').strip()
+                if value and len(value) > 20 and value.startswith('sk-'):
+                    self.deepseek_api_key = value
+                    print(f"✅ تم العثور على مفتاح DeepSeek صحيح: {key_name}")
+                    print(f"🔑 طول المفتاح: {len(value)} - المقطع الأول: {value[:12]}...")
+                    return
+                elif value:
+                    print(f"⚠️ مفتاح غير صحيح في {key_name}: طول={len(value)}, يبدأ بـ sk-={value.startswith('sk-') if value else False}")
+            except Exception as e:
+                print(f"❌ خطأ في قراءة {key_name}: {str(e)}")
         
+        # طباعة جميع متغيرات البيئة للتشخيص (فقط في التطوير)
+        all_env_vars = {k: v[:10] + "..." if len(v) > 10 else v for k, v in os.environ.items() if 'deepseek' in k.lower() or 'api' in k.lower()}
+        if all_env_vars:
+            print(f"🔍 متغيرات البيئة ذات الصلة: {list(all_env_vars.keys())}")
+        else:
+            print("❌ لم يتم العثور على أي مفاتيح API في بيئة Vercel!")
+            
         if not self.deepseek_api_key:
-            print("❌ لا توجد مفاتيح DeepSeek API!")
+            print("❌ تعذر العثور على مفتاح DeepSeek API صحيح في بيئة Vercel!")
+            print("💡 تأكد من إضافة مفتاح DeepSeek في إعدادات Environment Variables في Vercel")
     
     def search_legal_content(self, question: str, language: str) -> List[Dict[str, Any]]:
         """البحث في المحتوى القانوني"""
@@ -139,7 +165,12 @@ class ITTPFLegalSystem:
     def generate_deepseek_response(self, question: str, legal_context: List[Dict[str, Any]], language: str) -> str:
         """توليد إجابة ذكية باستخدام DeepSeek"""
         
+        # إعادة محاولة تهيئة المفتاح إذا لم يكن متاحاً
         if not self.deepseek_api_key:
+            self._initialize_deepseek()
+        
+        if not self.deepseek_api_key:
+            print("🔄 إعادة محاولة قراءة مفاتيح DeepSeek من البيئة...")
             return self._generate_fallback_response(question, legal_context, language)
         
         try:
@@ -154,18 +185,38 @@ class ITTPFLegalSystem:
             # إعداد البرومبت للغة المحددة
             if language == 'arabic':
                 system_prompt = """أنت خبير قانوني متخصص في قوانين الاتحاد الدولي لالتقاط الأوتاد (ITPF). 
-                
-مهمتك:
-1. تحليل السؤال القانوني بعمق
+
+## مهمتك:
+1. تحليل السؤال القانوني بعمق ودقة
 2. تقديم إجابة محددة وعملية بناءً على القوانين المتاحة
 3. تجنب الإجابات العامة والتركيز على السيناريو المحدد
-4. الإجابة باللغة العربية فقط
+4. الإجابة باللغة العربية فقط مع التنظيم المهني
 
-التعليمات:
+## التعليمات المحددة:
 - استخدم فقط المراجع القانونية المتاحة
 - قدم تحليل قانوني عملي ومحدد
-- اذكر أرقام المواد والملاحق ذات الصلة
-- تجنب خلط اللغات"""
+- اذكر أرقام المواد والملاحق ذات الصلة بوضوح
+- تجنب خلط اللغات نهائياً
+- انتبه لنظام النقاط والخصومات (6 نقاط للحمل، 4 للنزع، 2 للطعن)
+- انتبه لجدول خصومات الوقت (0.5 نقطة لكل ثانية تجاوز)
+
+## تنسيق الإجابة المطلوب:
+استخدم هذا التنسيق الدقيق:
+
+### 🔍 **التحليل القانوني المنظم:**
+
+#### **1️⃣ [العنوان الأول]:**
+**المادة [رقم]: [اسم المادة]**
+- ✅ أو ❌ [التحليل]
+- 📊 [التفاصيل إن وجدت]
+
+#### **2️⃣ [العنوان الثاني]:**
+**المادة [رقم]: [اسم المادة]**  
+- ⚖️ [التطبيق القانوني]
+
+### 🎯 **القرار النهائي:**
+- **الحكم:** [القرار المحدد]
+- **الأساس القانوني:** المواد [أرقام المواد]"""
                 
                 user_prompt = f"""السؤال: {question}
 
@@ -177,17 +228,37 @@ class ITTPFLegalSystem:
             else:
                 system_prompt = """You are a legal expert specialized in the International Tent Pegging Federation (ITPF) rules.
 
-Your task:
-1. Analyze the legal question thoroughly  
+## Your task:
+1. Analyze the legal question thoroughly and accurately
 2. Provide specific and practical answers based on available laws
 3. Avoid general answers and focus on the specific scenario
-4. Answer in English only
+4. Answer in English only with professional organization
 
-Instructions:
+## Specific Instructions:
 - Use only the available legal references
 - Provide practical and specific legal analysis
-- Mention relevant article and appendix numbers
-- Avoid mixing languages"""
+- Mention relevant article and appendix numbers clearly
+- Avoid mixing languages completely
+- Pay attention to scoring system and penalties (6 points for carry, 4 for lift, 2 for hit)
+- Pay attention to time penalty table (0.5 points per second over limit)
+
+## Required Answer Format:
+Use this exact formatting:
+
+### 🔍 **Organized Legal Analysis:**
+
+#### **1️⃣ [First Section Title]:**
+**Article [number]: [Article Name]**
+- ✅ or ❌ [Analysis]
+- 📊 [Details if applicable]
+
+#### **2️⃣ [Second Section Title]:**
+**Article [number]: [Article Name]**  
+- ⚖️ [Legal Application]
+
+### 🎯 **Final Decision:**
+- **Ruling:** [Specific Decision]
+- **Legal Basis:** Articles [article numbers]"""
                 
                 user_prompt = f"""Question: {question}
 
@@ -300,44 +371,67 @@ Required: Specific and detailed legal analysis of the question, citing relevant 
 # إنشاء المثيل العالمي
 itpf_system = ITTPFLegalSystem()
 
-def handler(event, context):
-    """معالج Vercel الرئيسي"""
-    try:
-        # استخراج البيانات من الطلب
-        if hasattr(event, 'get_json'):
-            data = event.get_json()
-        else:
-            data = json.loads(event.get('body', '{}'))
+from http.server import BaseHTTPRequestHandler
+import json
+
+class handler(BaseHTTPRequestHandler):
+    """معالج Vercel الرئيسي للنظام المتطور"""
+    
+    def do_OPTIONS(self):
+        """معالجة CORS preflight"""
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+    
+    def do_POST(self):
+        """معالجة طلبات POST"""
+        try:
+            # قراءة البيانات
+            content_length = int(self.headers.get('Content-Length', 0))
+            if content_length > 0:
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data.decode('utf-8'))
+            else:
+                data = {}
+            
+            question = data.get('question', '')
+            language = data.get('language', 'arabic')
+            
+            if not question:
+                self.send_error_response({'error': 'السؤال مطلوب'}, 400)
+                return
+            
+            # معالجة السؤال بالنظام المتطور
+            result = itpf_system.process_question(question, language)
+            
+            # إرسال الاستجابة
+            self.send_success_response(result)
+            
+        except Exception as e:
+            self.send_error_response({'error': str(e)}, 500)
+    
+    def send_success_response(self, data):
+        """إرسال استجابة ناجحة"""
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Cache-Control', 'no-cache')
+        self.end_headers()
         
-        question = data.get('question', '')
-        language = data.get('language', 'arabic')
+        response_json = json.dumps(data, ensure_ascii=False, indent=2)
+        self.wfile.write(response_json.encode('utf-8'))
+    
+    def send_error_response(self, error_data, status_code):
+        """إرسال استجابة خطأ"""
+        self.send_response(status_code)
+        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
         
-        if not question:
-            return {
-                'statusCode': 400,
-                'headers': {'Content-Type': 'application/json; charset=utf-8'},
-                'body': json.dumps({'error': 'السؤال مطلوب'}, ensure_ascii=False)
-            }
-        
-        # معالجة السؤال
-        result = itpf_system.process_question(question, language)
-        
-        return {
-            'statusCode': 200,
-            'headers': {
-                'Content-Type': 'application/json; charset=utf-8',
-                'Access-Control-Allow-Origin': '*',
-                'Cache-Control': 'no-cache'
-            },
-            'body': json.dumps(result, ensure_ascii=False, indent=2)
-        }
-        
-    except Exception as e:
-        return {
-            'statusCode': 500,
-            'headers': {'Content-Type': 'application/json; charset=utf-8'},
-            'body': json.dumps({'error': str(e)}, ensure_ascii=False)
-        }
+        response_json = json.dumps(error_data, ensure_ascii=False)
+        self.wfile.write(response_json.encode('utf-8'))
 
 # للاختبار المحلي
 if __name__ == "__main__":
